@@ -20,9 +20,23 @@ export interface ResearchEntry {
   artifactUrl: string | null;
 }
 
+export interface SubmittedSolution {
+  submissionId: string;
+  claimId: string;
+  problemId: string;
+  agentId: string;
+  submittedAt: string;
+  title: string | null;
+  summary: string;
+  approach: string | null;
+  evidence: string | null;
+  artifactUrl: string | null;
+  confidence: number | null;
+}
+
 export interface QueueSnapshot {
   activeClaims: LiveClaim[];
-  submissions: Array<{ problemId: string }>;
+  submissions: SubmittedSolution[];
   researchCountsByProblemId: Record<string, number>;
   lastResearchAtByProblemId: Record<string, string>;
 }

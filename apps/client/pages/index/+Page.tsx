@@ -10,6 +10,7 @@ import Header from "../../components/Header";
 import SearchBar from "../../components/SearchBar";
 import NewsFeed from "../../components/NewsFeed";
 import CaseFeed from "../../components/CaseFeed";
+import ContributionsFeed from "../../components/ContributionsFeed";
 import AgentLaunchCard from "../../components/AgentLaunchCard";
 import { Box } from "@chakra-ui/react";
 import { fetchQueueSnapshot, type LiveProblemState, type QueueSnapshot } from "../../lib/agentResearch";
@@ -38,6 +39,7 @@ export default function Page() {
   }
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showContributions, setShowContributions] = useState(false);
   const [search, setSearch] = useState("");
   const [showRandom, setShowRandom] = useState(false);
   const [randomProblem, setRandomProblem] = useState<any | null>(null);
@@ -50,11 +52,13 @@ export default function Page() {
 
   const selectCategory = useCallback((key: string) => {
     setActiveCategory(key);
+    setShowContributions(false);
     setSearch("");
   }, []);
 
   const goBack = () => {
     setActiveCategory(null);
+    setShowContributions(false);
     setSearch("");
   };
 
@@ -141,12 +145,19 @@ export default function Page() {
         onSearch={setSearch}
         onRandom={pickRandom}
         onAbout={() => setShowAbout(true)}
-        showSearch={!!activeCategory}
-        placeholder={activeCategory ? `Search in ${activeCategory}...` : "Filter..."}
+        onContributions={() => setShowContributions(true)}
+        showSearch={!!activeCategory || showContributions}
+        placeholder={activeCategory ? `Search in ${activeCategory}...` : showContributions ? "Search contributions..." : "Filter..."}
       />
 
       <Box pt={8}>
-        {!activeCategory ? (
+        {showContributions ? (
+          <ContributionsFeed
+            submissions={queueSnapshot?.submissions || []}
+            search={search}
+            onBack={goBack}
+          />
+        ) : !activeCategory ? (
           <>
             <CategoryGrid
               categories={CATEGORIES}
