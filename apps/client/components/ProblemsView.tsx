@@ -12,6 +12,8 @@ import {
 import { getEnrichment } from "../lib/wiki";
 import { fetchProblemResearch, type LiveProblemState, type ResearchEntry } from "../lib/agentResearch";
 import { makeProblemId } from "../lib/problemIds";
+import { getProblemRisk } from "../lib/risk";
+import RiskBadge from "./RiskBadge";
 
 interface ProblemItemExpandedProps {
   categoryKey: string;
@@ -23,6 +25,7 @@ interface ProblemItemExpandedProps {
 
 function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemState }: ProblemItemExpandedProps) {
   const enrichment = getEnrichment(text);
+  const risk = getProblemRisk(categoryKey, section, text, enrichment);
   const [expanded, setExpanded] = useState(false);
   const [researchEntries, setResearchEntries] = useState<ResearchEntry[] | null>(null);
   const [loadingResearch, setLoadingResearch] = useState(false);
@@ -81,6 +84,7 @@ function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemSta
           {index + 1}.
         </Text>
         <Text as="span">{text}</Text>
+        <RiskBadge risk={risk} />
         {liveProblemState?.activeClaim && (
           <Badge bg="orange.100" color="orange.800" textTransform="none">
             Agent working
@@ -189,6 +193,7 @@ function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemSta
             </Box>
           )}
           <Flex align="center" gap={3} wrap="wrap">
+            <RiskBadge risk={risk} />
             {enrichment?.field && (
               <Badge
                 variant="subtle"

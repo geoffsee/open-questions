@@ -17,6 +17,8 @@ import {
 } from '@chakra-ui/react';
 import { getEnrichment } from '../lib/wiki';
 import type { LiveProblemState } from '../lib/agentResearch';
+import { getProblemRisk } from '../lib/risk';
+import RiskBadge from './RiskBadge';
 
 interface Problem {
   id: string;
@@ -54,6 +56,7 @@ const commonButtonStyles: ButtonProps = {
 
 export default function RandomModal({ problem, isOpen, onNext, onClose, liveProblemState }: RandomModalProps) {
   const enrichment = problem ? getEnrichment(problem.text) : null;
+  const risk = problem ? getProblemRisk(problem.category, problem.section, problem.text, enrichment) : null;
 
   return (
     <DialogRoot open={isOpen} onOpenChange={(e) => !e.open && onClose()} placement="center" size="xl">
@@ -101,6 +104,11 @@ export default function RandomModal({ problem, isOpen, onNext, onClose, liveProb
                 <Text fontSize="0.95rem" lineHeight="1.7" color="app.text">
                   {problem.text}
                 </Text>
+                {risk && (
+                  <Flex mt={3}>
+                    <RiskBadge risk={risk} />
+                  </Flex>
+                )}
 
                 {liveProblemState && (liveProblemState.activeClaim || liveProblemState.researchCount > 0 || liveProblemState.hasSubmissions) && (
                   <Box mt={4} p={3} bg="app.bgSection" border="1px solid" borderColor="app.border" borderRadius="sm">
