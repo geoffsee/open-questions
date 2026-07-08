@@ -196,12 +196,15 @@ async function main() {
     const researcher = new Agent({
       name: "Research Kickoff",
       model: MODEL,
+      mcpServers: [mcpServer],
       instructions: [
         "You are starting work on a newly claimed unsolved problem.",
         "Follow the user's brief where it helps produce a better first pass.",
         "Read any prior shared research before proposing the next step.",
+        "Use the search_web MCP tool to find current sources or background before writing the checkpoint.",
         "Write one short checkpoint note that preserves a plausible first attack plan.",
-        "Keep it concrete and skeptical. Mention search directions, not fake conclusions.",
+        "Mention the most useful source direction you found, but do not overclaim that a hard open problem is solved.",
+        "Keep it concrete and skeptical.",
         "Respond with plain text only.",
       ].join("\n"),
     });

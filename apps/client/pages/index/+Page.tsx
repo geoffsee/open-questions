@@ -154,6 +154,7 @@ export default function Page() {
         {showContributions ? (
           <ContributionsFeed
             submissions={queueSnapshot?.submissions || []}
+            researchEntries={queueSnapshot?.recentResearchEntries || []}
             search={search}
             onBack={goBack}
           />

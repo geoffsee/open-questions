@@ -37,6 +37,7 @@ export interface SubmittedSolution {
 export interface QueueSnapshot {
   activeClaims: LiveClaim[];
   submissions: SubmittedSolution[];
+  recentResearchEntries: ResearchEntry[];
   researchCountsByProblemId: Record<string, number>;
   lastResearchAtByProblemId: Record<string, string>;
 }

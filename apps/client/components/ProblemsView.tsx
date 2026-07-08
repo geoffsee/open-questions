@@ -282,10 +282,12 @@ function Section({ categoryKey, heading, problems, defaultOpen, liveProblemState
         >
           &#9654;
         </Text>
-        {heading}
+        <Text as="span" flex="1" minW={0} whiteSpace="normal" overflowWrap="anywhere">
+          {heading}
+        </Text>
         <Text
           as="span"
-          ml="auto"
+          flex="0 0 auto"
           fontFamily="mono"
           fontSize="0.72rem"
           color="app.textDim"

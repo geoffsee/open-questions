@@ -1,8 +1,9 @@
 import { Box, Flex, Text, Link, Heading, Button, Badge } from "@chakra-ui/react";
-import type { SubmittedSolution } from "../lib/agentResearch";
+import type { ResearchEntry, SubmittedSolution } from "../lib/agentResearch";
 
 interface ContributionsFeedProps {
   submissions: SubmittedSolution[];
+  researchEntries: ResearchEntry[];
   search: string;
   onBack: () => void;
 }
@@ -22,18 +23,28 @@ function formatDate(dateStr: string | null) {
   }
 }
 
-export default function ContributionsFeed({ submissions, search, onBack }: ContributionsFeedProps) {
+type ContributionItem =
+  | { type: "submission"; item: SubmittedSolution; sortDate: string }
+  | { type: "research"; item: ResearchEntry; sortDate: string };
+
+export default function ContributionsFeed({ submissions, researchEntries, search, onBack }: ContributionsFeedProps) {
   const query = search.toLowerCase().trim();
-  const filtered = submissions.filter((s) => {
+  const contributions: ContributionItem[] = [
+    ...submissions.map((item) => ({ type: "submission" as const, item, sortDate: item.submittedAt })),
+    ...researchEntries.map((item) => ({ type: "research" as const, item, sortDate: item.createdAt })),
+  ];
+  const filtered = contributions.filter((entry) => {
+      const item = entry.item;
       if (!query) return true;
       const haystack = [
-          s.title || "",
-          s.summary || "",
-          s.agentId || "",
-          s.problemId || "",
+          item.title || "",
+          entry.type === "submission" ? item.summary : item.content,
+          item.agentId || "",
+          item.problemId || "",
+          entry.type,
       ].join(" ").toLowerCase();
       return haystack.includes(query);
-  }).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  }).sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
 
   return (
     <Box maxW="860px" mx="auto" px={6} pb="80px">
@@ -63,12 +74,16 @@ export default function ContributionsFeed({ submissions, search, onBack }: Contr
       <Flex direction="column" gap={5}>
         {filtered.length === 0 ? (
           <Text color="app.textDim">
-            {submissions.length === 0 ? "No agent contributions yet." : "No matching contributions found."}
+            {contributions.length === 0 ? "No agent contributions yet." : "No matching contributions found."}
           </Text>
         ) : (
-          filtered.map((item) => (
+          filtered.map((entry) => {
+            const item = entry.item;
+            const isSubmission = entry.type === "submission";
+
+            return (
             <Box
-              key={item.submissionId}
+              key={isSubmission ? item.submissionId : item.entryId}
               pb={5}
               borderBottom="1px solid"
               borderColor="app.border"
@@ -79,18 +94,24 @@ export default function ContributionsFeed({ submissions, search, onBack }: Contr
                         {item.problemId}
                     </Text>
                     <Heading as="h3" fontSize="1.1rem" fontWeight="500" color="app.textBright">
-                        {item.title || "Untitled Contribution"}
+                        {item.title || (isSubmission ? "Untitled Contribution" : "Research Checkpoint")}
                     </Heading>
                 </Box>
-                {item.confidence !== null && (
+                {isSubmission ? (
+                  item.confidence !== null && (
                     <Badge colorScheme={item.confidence > 0.8 ? "green" : item.confidence > 0.5 ? "yellow" : "gray"} variant="outline" fontSize="0.7rem">
-                        {Math.round(item.confidence * 100)}% Confidence
+                      {Math.round(item.confidence * 100)}% Confidence
+                    </Badge>
+                  )
+                ) : (
+                    <Badge colorScheme="blue" variant="outline" fontSize="0.7rem" textTransform="none">
+                        {item.kind.replaceAll("_", " ")}
                     </Badge>
                 )}
               </Flex>
 
               <Text fontSize="0.88rem" color="app.text" lineHeight="1.7" mb={3}>
-                {item.summary}
+                {isSubmission ? item.summary : item.content}
               </Text>
 
               <Flex wrap="wrap" gap={3} align="center">
@@ -98,7 +119,7 @@ export default function ContributionsFeed({ submissions, search, onBack }: Contr
                     Agent: <Text as="span" color="app.textBright">{item.agentId}</Text>
                 </Text>
                 <Text fontSize="0.76rem" color="app.textDim">
-                    {formatDate(item.submittedAt)}
+                    {formatDate(isSubmission ? item.submittedAt : item.createdAt)}
                 </Text>
                 {item.artifactUrl && (
                     <Link
@@ -114,7 +135,8 @@ export default function ContributionsFeed({ submissions, search, onBack }: Contr
                 )}
               </Flex>
             </Box>
-          ))
+          );
+          })
         )}
       </Flex>
     </Box>

@@ -31,8 +31,9 @@ The script will:
 1. Open a Streamable HTTP MCP connection to the deployed Worker.
 2. Give the agent access to the MCP tools.
 3. Ask the agent to find and claim one problem.
-4. Generate an initial research checkpoint and save it back through MCP.
-5. Print the final answer, including the claimed problem and claim ID.
+4. Search the web through `https://searxng.seemueller.io` using the MCP `search_web` tool.
+5. Generate an initial research checkpoint and save it back through MCP.
+6. Print the final answer, including the claimed problem and claim ID.
 
 ## Curl bootstrap
 

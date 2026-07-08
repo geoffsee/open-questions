@@ -90,6 +90,7 @@ type QueueState = {
 type QueueSnapshot = {
   activeClaims: ProblemClaim[];
   submissions: SubmittedSolution[];
+  recentResearchEntries: ResearchEntry[];
   researchCountsByProblemId: Record<string, number>;
   lastResearchAtByProblemId: Record<string, string>;
 };
@@ -103,6 +104,23 @@ const MAX_PICK_LIMIT = 100;
 const DEFAULT_LEASE_MINUTES = 120;
 const MAX_LEASE_MINUTES = 7 * 24 * 60;
 const DEFAULT_PAGES_ORIGIN = "https://geoffsee.github.io/unsolved-problems";
+const DEFAULT_SEARXNG_ORIGIN = "https://searxng.seemueller.io";
+
+type SearxngResult = {
+  title?: string;
+  url?: string;
+  content?: string;
+  engine?: string;
+  engines?: string[];
+  score?: number;
+};
+
+type SearxngResponse = {
+  results?: SearxngResult[];
+  answers?: string[];
+  suggestions?: string[];
+  unresponsive_engines?: Array<[string, string]>;
+};
 
 function getLocalStatePath() {
   try {
@@ -148,6 +166,10 @@ let cachedProblems:
 
 function getPagesOrigin(env?: Bindings) {
   return (env?.PAGES_ORIGIN || process.env.PAGES_ORIGIN || DEFAULT_PAGES_ORIGIN).replace(/\/+$/, "");
+}
+
+function getSearxngOrigin() {
+  return (process.env.SEARXNG_ORIGIN || DEFAULT_SEARXNG_ORIGIN).replace(/\/+$/, "");
 }
 
 function isAllowedPath(pathname: string) {
@@ -268,6 +290,10 @@ function createQueueSnapshot(state: QueueState): QueueSnapshot {
   return {
     activeClaims: Object.values(state.claimsByProblemId).filter((claim) => claim.status === "active"),
     submissions: Object.values(state.solutionsByProblemId).flat(),
+    recentResearchEntries: Object.values(state.researchEntriesByProblemId)
+      .flat()
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 50),
     researchCountsByProblemId,
     lastResearchAtByProblemId,
   };
@@ -347,6 +373,46 @@ async function fetchJson<T>(pathname: string, env?: Bindings): Promise<T> {
   }
 
   return (await response.json()) as T;
+}
+
+async function searchSearxng(input: { query: string; categories?: string; language?: string; limit: number }) {
+  const url = new URL(`${getSearxngOrigin()}/search`);
+  url.searchParams.set("q", input.query);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("safesearch", "1");
+  if (input.categories) url.searchParams.set("categories", input.categories);
+  if (input.language) url.searchParams.set("language", input.language);
+
+  const response = await fetch(url, {
+    headers: {
+      accept: "application/json",
+      "user-agent": "unsolved-problems-mcp/1.0",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`SearXNG returned ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as SearxngResponse;
+  const results = (payload.results ?? [])
+    .filter((result) => result.title && result.url)
+    .slice(0, input.limit)
+    .map((result) => ({
+      title: normalizeText(result.title ?? ""),
+      url: result.url ?? "",
+      snippet: result.content ? normalizeText(result.content) : null,
+      engines: result.engines ?? (result.engine ? [result.engine] : []),
+      score: result.score ?? null,
+    }));
+
+  return {
+    query: input.query,
+    answers: payload.answers ?? [],
+    suggestions: payload.suggestions ?? [],
+    unresponsiveEngines: payload.unresponsive_engines ?? [],
+    results,
+  };
 }
 
 async function loadProblems(env?: Bindings) {
@@ -1039,6 +1105,59 @@ function createMcpServer(env?: Bindings) {
   );
 
   server.registerTool(
+    "search_web",
+    {
+      title: "Search Web",
+      description: "Search the web through the configured SearXNG instance for sources relevant to a problem.",
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+      },
+      inputSchema: z.object({
+        query: z.string().min(1),
+        categories: z.string().optional().describe("Optional SearXNG category filter, such as general, science, or news."),
+        language: z.string().optional().describe("Optional SearXNG language code, such as en-US or all."),
+        limit: z.number().int().min(1).max(10).optional().default(5),
+      }),
+    },
+    async ({ query, categories, language, limit }) => {
+      try {
+        const search = await searchSearxng({
+          query: normalizeText(query),
+          categories: categories ? normalizeText(categories) : undefined,
+          language: language ? normalizeText(language) : undefined,
+          limit,
+        });
+
+        return {
+          content: textContent(
+            search.results.length === 0
+              ? `No search results found for "${search.query}".`
+              : search.results
+                  .map((result, index) =>
+                    [
+                      `${index + 1}. ${result.title}`,
+                      result.url,
+                      result.snippet ? `   ${result.snippet}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join("\n"),
+                  )
+                  .join("\n\n"),
+          ),
+          structuredContent: search,
+        };
+      } catch (error) {
+        return {
+          content: textContent(error instanceof Error ? error.message : "Search failed."),
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
     "list_claims",
     {
       title: "List Claims",
@@ -1240,7 +1359,7 @@ app.get("/", (c) =>
       endpoint: "/mcp",
       transport: "streamable-http",
       jsonResponsesOnly: true,
-      tools: ["list_problems", "pick_problem", "release_problem", "submit_solution", "save_progress", "list_claims"],
+      tools: ["list_problems", "pick_problem", "release_problem", "submit_solution", "save_progress", "search_web", "list_claims"],
       resources: ["unsolved://catalog", "unsolved://queue", "unsolved://problem/{problemId}"],
       prompts: ["work_problem"],
     },

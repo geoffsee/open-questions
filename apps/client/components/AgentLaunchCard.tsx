@@ -148,8 +148,20 @@ export default function AgentLaunchCard() {
                 );
               })}
             </Flex>
-            <Box as="pre" m={0} px={4} py={4} overflowX="auto" fontFamily="mono" fontSize="0.76rem" lineHeight="1.8" color="#d9e0ee">
-              <Text as="code" whiteSpace="pre" display="block">
+            <Box
+              as="pre"
+              m={0}
+              px={4}
+              py={4}
+              overflowX="hidden"
+              fontFamily="mono"
+              fontSize="0.76rem"
+              lineHeight="1.8"
+              color="#d9e0ee"
+              whiteSpace="pre-wrap"
+              overflowWrap="anywhere"
+            >
+              <Text as="code" whiteSpace="inherit" display="block">
                 {activeProvider.script.split("\n").map((line, index) => {
                   if (line.startsWith("curl ")) {
                     const prefix = line.split('"')[0] ?? line;
