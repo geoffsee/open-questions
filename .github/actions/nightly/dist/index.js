@@ -31117,6 +31117,40 @@ function hasCachedProblems(path, manifestPath) {
         return false;
     }
 }
+function normalizeProblemData(data) {
+    if (!isRecord(data) || !isRecord(data.categories))
+        return data;
+    const categories = Object.fromEntries(Object.entries(data.categories).map(([category, rawSections]) => {
+        if (!Array.isArray(rawSections))
+            return [category, rawSections];
+        const sections = new Map();
+        for (const rawSection of rawSections) {
+            if (!isRecord(rawSection) ||
+                typeof rawSection.heading !== "string" ||
+                !Array.isArray(rawSection.problems))
+                continue;
+            const existing = sections.get(rawSection.heading);
+            const problems = rawSection.problems.filter((problem) => typeof problem === "string");
+            if (existing) {
+                existing.problems = [...new Set([...existing.problems, ...problems])];
+            }
+            else {
+                sections.set(rawSection.heading, {
+                    heading: rawSection.heading,
+                    problems: [...new Set(problems)],
+                });
+            }
+        }
+        return [category, [...sections.values()]];
+    }));
+    return { ...data, categories };
+}
+function normalizeCachedProblems(path) {
+    const source = (0,external_node_fs_namespaceObject.readFileSync)(path, "utf8");
+    const normalized = JSON.stringify(normalizeProblemData(JSON.parse(source)), null, 2);
+    if (normalized !== source)
+        (0,external_node_fs_namespaceObject.writeFileSync)(path, normalized);
+}
 async function command(cwd, args) {
     const exitCode = await exec_exec("bun", args, { cwd });
     if (exitCode !== 0)
@@ -31144,6 +31178,7 @@ async function run() {
         await command(client, ["x", "playwright", "install", "chromium"]);
         if (hasCachedProblems((0,external_node_path_namespaceObject.resolve)(client, "public/data/problems.json"), manifestPath)) {
             info("Using cached problems.json");
+            normalizeCachedProblems((0,external_node_path_namespaceObject.resolve)(client, "public/data/problems.json"));
             await publishCachedProblems(client, manifestPath, (0,external_node_path_namespaceObject.resolve)(client, "public/data/problems.json"));
         }
         else {

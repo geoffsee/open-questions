@@ -59,6 +59,24 @@ interface ProblemsFile {
 	categories?: Record<string, ProblemSection[]>;
 }
 
+function mergeProblemSections(sections: ProblemSection[]): ProblemSection[] {
+	const merged = new Map<string, ProblemSection>();
+	for (const section of sections) {
+		const existing = merged.get(section.heading);
+		if (existing) {
+			existing.problems = [
+				...new Set([...existing.problems, ...section.problems]),
+			];
+		} else {
+			merged.set(section.heading, {
+				heading: section.heading,
+				problems: [...new Set(section.problems)],
+			});
+		}
+	}
+	return [...merged.values()];
+}
+
 export async function loadManifest(
 	path = MANIFEST_PATH,
 ): Promise<CategoryManifest> {
@@ -207,7 +225,7 @@ export async function fetchCategory(
 	console.log(
 		`  [${key}] ${result.reduce((n, s) => n + s.problems.length, 0)} problems in ${result.length} sections`,
 	);
-	return result;
+	return mergeProblemSections(result);
 }
 
 export async function main(): Promise<void> {
@@ -252,7 +270,7 @@ export async function main(): Promise<void> {
 			console.warn(
 				`  [${key}] FAILED: ${message}; preserving ${previous.reduce((n, section) => n + section.problems.length, 0)} previous problems`,
 			);
-			data[key] = previous;
+			data[key] = mergeProblemSections(previous);
 		}
 		if (i < categories.length - 1) await Bun.sleep(1000);
 	}

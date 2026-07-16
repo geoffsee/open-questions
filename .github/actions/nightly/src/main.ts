@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import * as core from "@actions/core";
 import * as exec from "@actions/exec";
@@ -73,6 +73,53 @@ export function hasCachedProblems(
 	}
 }
 
+export function normalizeProblemData(data: unknown): unknown {
+	if (!isRecord(data) || !isRecord(data.categories)) return data;
+
+	const categories = Object.fromEntries(
+		Object.entries(data.categories).map(([category, rawSections]) => {
+			if (!Array.isArray(rawSections)) return [category, rawSections];
+			const sections = new Map<
+				string,
+				{ heading: string; problems: string[] }
+			>();
+			for (const rawSection of rawSections) {
+				if (
+					!isRecord(rawSection) ||
+					typeof rawSection.heading !== "string" ||
+					!Array.isArray(rawSection.problems)
+				)
+					continue;
+				const existing = sections.get(rawSection.heading);
+				const problems = rawSection.problems.filter(
+					(problem): problem is string => typeof problem === "string",
+				);
+				if (existing) {
+					existing.problems = [...new Set([...existing.problems, ...problems])];
+				} else {
+					sections.set(rawSection.heading, {
+						heading: rawSection.heading,
+						problems: [...new Set(problems)],
+					});
+				}
+			}
+			return [category, [...sections.values()]];
+		}),
+	);
+
+	return { ...data, categories };
+}
+
+export function normalizeCachedProblems(path: string): void {
+	const source = readFileSync(path, "utf8");
+	const normalized = JSON.stringify(
+		normalizeProblemData(JSON.parse(source)),
+		null,
+		2,
+	);
+	if (normalized !== source) writeFileSync(path, normalized);
+}
+
 async function command(cwd: string, args: string[]) {
 	const exitCode = await exec.exec("bun", args, { cwd });
 	if (exitCode !== 0)
@@ -118,6 +165,7 @@ export async function run(): Promise<void> {
 			)
 		) {
 			core.info("Using cached problems.json");
+			normalizeCachedProblems(resolve(client, "public/data/problems.json"));
 			await publishCachedProblems(
 				client,
 				manifestPath,

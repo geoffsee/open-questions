@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { hasCachedProblems, publishCachedProblems } from "./main";
+import {
+	hasCachedProblems,
+	normalizeProblemData,
+	publishCachedProblems,
+} from "./main";
 
 describe("nightly data cache", () => {
 	test("detects an existing problems file", () => {
@@ -43,5 +47,22 @@ describe("nightly data cache", () => {
 				],
 			},
 		]);
+	});
+
+	test("merges duplicate cached section headings and problem text", () => {
+		expect(
+			normalizeProblemData({
+				categories: {
+					mathematics: [
+						{ heading: "Algebra", problems: ["A", "B"] },
+						{ heading: "Algebra", problems: ["B", "C"] },
+					],
+				},
+			}),
+		).toEqual({
+			categories: {
+				mathematics: [{ heading: "Algebra", problems: ["A", "B", "C"] }],
+			},
+		});
 	});
 });
