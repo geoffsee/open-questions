@@ -1,5 +1,5 @@
 services:
-  actions:
+  open-questions:
     build:
       context: .
       dockerfile: Dockerfile
