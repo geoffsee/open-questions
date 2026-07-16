@@ -9,6 +9,7 @@
 
 import { type BrowserContext, chromium, type LaunchOptions } from "playwright";
 import type { CaseCategoryData, CaseItem } from "../lib/cases";
+import { publish } from "./publish";
 
 const OUTPUT_PATH = "public/data/cases.json";
 const HISTORY_DIR = "public/data/case-history";
@@ -643,6 +644,7 @@ async function main(): Promise<void> {
 
 	await Bun.write(OUTPUT_PATH, JSON.stringify(output, null, 2));
 	const archive = await saveArchive(output);
+	await publish(OUTPUT_PATH, archive.snapshotPath, `${HISTORY_DIR}/index.json`);
 
 	console.log(
 		`\nDone. ${archive.totalCases} case listings written to ${OUTPUT_PATH} and archived at ${archive.snapshotPath} (${archive.snapshotCount} total snapshots)`,

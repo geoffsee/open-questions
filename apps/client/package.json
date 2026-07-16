@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vike dev",
 		"build": "vike build",
+		"build:cli": "bun build --compile scripts/publish-cli.ts --outfile dist/publish-cli",
 		"build:full": "bun run fetch-data && bun run fetch-news && bun run fetch-cases && bun run enrich-data && bun run build",
 		"fetch-data": "bun scripts/fetch-data.ts",
 		"fetch-news": "bun scripts/fetch-news.ts",

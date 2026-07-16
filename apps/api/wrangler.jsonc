@@ -20,6 +20,12 @@
 			}
 		]
 	},
+	"r2_buckets": [
+		{
+			"binding": "open_questions_data",
+			"bucket_name": "open-questions-data"
+		}
+	],
 	"migrations": [
 		{
 			"tag": "v1",

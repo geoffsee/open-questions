@@ -10,6 +10,7 @@
 import { resolve } from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
 import type { EnrichmentProblem, Section } from "../lib/wiki";
+import { publish } from "./publish";
 
 const PROBLEMS_PATH = resolve("public/data/problems.json");
 const ENRICHMENTS_PATH = resolve("public/data/enrichments.json");
@@ -207,6 +208,7 @@ async function main(): Promise<void> {
 
 	console.log(`\nDone. Enriched ${enrichedCount} problems.`);
 	console.log(`Total enrichments: ${Object.keys(existing).length}`);
+	await publish(ENRICHMENTS_PATH);
 }
 
 main().catch((err) => {

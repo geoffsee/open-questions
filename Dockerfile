@@ -30,6 +30,7 @@ RUN bun install --frozen-lockfile
 COPY . .
 
 RUN VITE_BASE_PATH=/ VITE_API_ORIGIN=http://localhost:3040/api bun run --cwd apps/client build \
+	&& bun run --cwd apps/client build:cli \
 	&& mkdir -p /workspace/.github /data
 
 ENV PORT=3030 \

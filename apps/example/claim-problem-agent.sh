@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MCP_URL="${OPEN_QUESTIONS_MCP_URL:-https://unsolved-problems-api.seemueller.workers.dev/mcp}"
+MCP_URL="${OPEN_QUESTIONS_MCP_URL:-${OPEN_QUESTIONS_API_ORIGIN:-https://unsolved-problems-api.seemueller.workers.dev}/mcp}"
 PROVIDER="${OPEN_QUESTIONS_PROVIDER:-openai}"
 
 if ! command -v curl >/dev/null 2>&1; then

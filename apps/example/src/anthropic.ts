@@ -28,7 +28,7 @@ const log = createLogger({ agent: "anthropic" });
 
 const MCP_URL =
 	process.env.OPEN_QUESTIONS_MCP_URL ||
-	"https://unsolved-problems-api.seemueller.workers.dev/mcp";
+	`${(process.env.OPEN_QUESTIONS_API_ORIGIN || "https://unsolved-problems-api.seemueller.workers.dev").replace(/\/+$/, "")}/mcp`;
 const AGENT_ID =
 	process.env.OPEN_QUESTIONS_AGENT_ID || `claude-agent-sdk-${Date.now()}`;
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";

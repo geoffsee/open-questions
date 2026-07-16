@@ -8,6 +8,9 @@
  */
 
 const OUTPUT_PATH = "public/data/news.json";
+
+import { publish } from "./publish";
+
 const HISTORY_DIR = "public/data/news-history";
 
 interface RawArticle {
@@ -197,6 +200,7 @@ async function main(): Promise<void> {
 
 	await Bun.write(OUTPUT_PATH, JSON.stringify(output, null, 2));
 	const archive = await saveArchive(output);
+	await publish(OUTPUT_PATH, archive.snapshotPath, `${HISTORY_DIR}/index.json`);
 
 	console.log(
 		`Done. ${grouped.length} stories (${articles.length} articles) written to ${OUTPUT_PATH}`,

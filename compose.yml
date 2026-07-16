@@ -12,7 +12,7 @@ services:
       - "3032:3032"
       - "3040:3040"
     env_file:
-      - path: .env.actions
+      - path: .env.open-questions
         required: false
     volumes:
       - ./.github:/workspace/.github:ro

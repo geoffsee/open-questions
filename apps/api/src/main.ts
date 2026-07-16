@@ -1,3 +1,5 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	McpServer,
@@ -39,6 +41,8 @@ export { AuthStoreDurableObject };
 type Bindings = AuthBindings & {
 	PAGES_ORIGIN?: string;
 	PROBLEM_QUEUE?: DurableObjectNamespace;
+	PUBLISH_KEY?: string;
+	PUBLISH_DATA_DIR?: string;
 };
 
 type ProblemSection = {
@@ -238,6 +242,33 @@ export function isAllowedPath(pathname: string) {
 
 function buildUpstreamUrl(pathname: string, env?: Bindings) {
 	return new URL(`${getPagesOrigin(env)}${pathname}`);
+}
+
+function publishedDataPath(pathname: string, env?: Bindings) {
+	const relative = pathname.replace(/^\/data\//, "");
+	const root =
+		env?.PUBLISH_DATA_DIR || process.env.PUBLISH_DATA_DIR || "data/published";
+	return join(root, relative);
+}
+
+function publishKey(env?: Bindings) {
+	return env?.PUBLISH_KEY || process.env.PUBLISH_KEY;
+}
+
+async function zstdCompress(value: string): Promise<Uint8Array> {
+	const stream = new CompressionStream("zstd");
+	const writer = stream.writable.getWriter();
+	await writer.write(new TextEncoder().encode(value));
+	await writer.close();
+	return new Uint8Array(await new Response(stream.readable).arrayBuffer());
+}
+
+async function zstdDecompress(value: Uint8Array): Promise<string> {
+	const stream = new DecompressionStream("zstd");
+	const writer = stream.writable.getWriter();
+	await writer.write(value);
+	await writer.close();
+	return new Response(stream.readable).text();
 }
 
 function jsonError(message: string, status: number) {
@@ -2217,6 +2248,17 @@ app.get("/data/*", async (c) => {
 		return jsonError("Only approved JSON data files are available.", 404);
 	}
 
+	const localPath = `${publishedDataPath(pathname, c.env)}.zst`;
+	try {
+		const body = await zstdDecompress(await readFile(localPath));
+		return new Response(body, {
+			headers: {
+				"content-type": "application/json",
+				"access-control-allow-origin": "*",
+				"x-data-source": "published",
+			},
+		});
+	} catch {}
 	const upstreamUrl = buildUpstreamUrl(pathname, c.env);
 	const upstream = await fetch(upstreamUrl, {
 		headers: {
@@ -2246,6 +2288,22 @@ app.get("/data/*", async (c) => {
 		status: upstream.status,
 		headers,
 	});
+});
+
+app.post("/publish", async (c) => {
+	if (
+		!publishKey(c.env) ||
+		c.req.header("authorization") !== `Bearer ${publishKey(c.env)}`
+	) {
+		return jsonError("A valid publish Bearer token is required.", 401);
+	}
+	const body = await c.req.json<{ path?: string; data?: unknown }>();
+	if (!body.path || !isAllowedPath(body.path))
+		return jsonError("Invalid data path.", 400);
+	const path = publishedDataPath(body.path, c.env);
+	await mkdir(path.replace(/\/[^/]+$/, ""), { recursive: true });
+	await writeFile(`${path}.zst`, await zstdCompress(JSON.stringify(body.data)));
+	return c.json({ ok: true, path: body.path });
 });
 
 app.notFound(() => jsonError("Not found.", 404));

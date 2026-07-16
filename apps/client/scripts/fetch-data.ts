@@ -8,6 +8,7 @@
  */
 
 import { parseHTML } from "linkedom";
+import { publish } from "./publish";
 
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 const OUTPUT_PATH = "public/data/problems.json";
@@ -192,6 +193,7 @@ async function main(): Promise<void> {
 	};
 
 	await Bun.write(OUTPUT_PATH, JSON.stringify(output, null, 2));
+	await publish(OUTPUT_PATH);
 
 	const totalProblems = Object.values(data)
 		.flat()
