@@ -46,6 +46,8 @@ jobs:
         env:
           PERIGON_API_KEY: ${{ secrets.PERIGON_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PUBLISH_API_ORIGIN: ${{ secrets.PUBLISH_API_ORIGIN }}
+          PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
 
       - name: Save data cache
         uses: actions/cache/save@v4

@@ -77,6 +77,7 @@ export async function run(): Promise<void> {
 				: resolve(client, configuredManifest)
 			: resolve(client, "public/data/manifest.json");
 		await command(client, ["install"]);
+		await command(client, ["run", "build:cli"]);
 		await command(client, ["x", "playwright", "install", "chromium"]);
 
 		if (

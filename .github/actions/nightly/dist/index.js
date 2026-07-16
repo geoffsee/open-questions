@@ -31123,6 +31123,7 @@ async function run() {
                 : (0,external_node_path_namespaceObject.resolve)(client, configuredManifest)
             : (0,external_node_path_namespaceObject.resolve)(client, "public/data/manifest.json");
         await command(client, ["install"]);
+        await command(client, ["run", "build:cli"]);
         await command(client, ["x", "playwright", "install", "chromium"]);
         if (hasCachedProblems((0,external_node_path_namespaceObject.resolve)(client, "public/data/problems.json"), manifestPath)) {
             info("Using cached problems.json");
