@@ -20,7 +20,7 @@ renderer.link = ({ href, title, text }: Tokens.Link) => {
 
 renderer.html = () => "";
 
-marked.setOptions({
+marked.use({
 	gfm: true,
 	breaks: false,
 	renderer,
@@ -35,8 +35,60 @@ function escapeAttr(value: string) {
 		.replaceAll(">", "&gt;");
 }
 
+/**
+ * Older save_progress writes collapsed newlines with normalizeText(), which
+ * smashed GFM tables onto one line. Rebuild row breaks when we can.
+ */
+export function restoreCollapsedGfmTables(text: string): string {
+	if (text.includes("\n") || !text.includes("|")) {
+		return text;
+	}
+
+	// Match a full GFM separator row: | --- | --- |
+	const sepMatch = text.match(/\|(?:\s*:?-{3,}:?\s*\|)+/);
+	if (!sepMatch || sepMatch.index === undefined) {
+		return text;
+	}
+
+	const separator = sepMatch[0].trim();
+	const colCount = (separator.match(/\|/g) ?? []).length - 1;
+	if (colCount < 1) {
+		return text;
+	}
+
+	const cell = String.raw`\|[^|]*`;
+	const rowPattern = new RegExp(`((?:${cell}){${colCount}}\\|)`);
+	const sepStart = sepMatch.index;
+	const before = text.slice(0, sepStart).trimEnd();
+	const after = text.slice(sepStart + sepMatch[0].length).trimStart();
+
+	const headerMatch = before.match(
+		new RegExp(`((?:${cell}){${colCount}}\\|)$`),
+	);
+	if (!headerMatch) {
+		return text;
+	}
+
+	const header = headerMatch[1];
+	const prefix = before.slice(0, before.length - header.length).trimEnd();
+	const rows = [header, separator];
+
+	let rest = after;
+	while (rest.startsWith("|")) {
+		const match = rowPattern.exec(rest);
+		if (!match || match.index !== 0) {
+			break;
+		}
+		rows.push(match[1]);
+		rest = rest.slice(match[1].length).trimStart();
+	}
+
+	return [prefix, ...rows, rest].filter(Boolean).join("\n");
+}
+
 export function renderMarkdown(source: string): string {
-	const html = marked.parse(source, { async: false });
+	const restored = restoreCollapsedGfmTables(source);
+	const html = marked.parse(restored, { async: false });
 	return typeof html === "string" ? html : "";
 }
 
@@ -144,21 +196,29 @@ export function MarkdownContent({
 					borderTop: "1px solid var(--chakra-colors-app-border)",
 				},
 				"& table": {
+					display: "table",
 					width: "100%",
+					maxWidth: "100%",
 					borderCollapse: "collapse",
 					fontSize: "0.9em",
 					margin: "0.65em 0",
+					overflowWrap: "normal",
 				},
+				"& thead": { display: "table-header-group" },
+				"& tbody": { display: "table-row-group" },
+				"& tr": { display: "table-row" },
 				"& th, & td": {
-					borderBottom: "1px solid var(--chakra-colors-app-border)",
+					display: "table-cell",
+					border: "1px solid var(--chakra-colors-app-border)",
 					padding: "0.4rem 0.5rem",
 					textAlign: "left",
 					verticalAlign: "top",
+					overflowWrap: "anywhere",
 				},
 				"& th": {
 					color: "var(--chakra-colors-app-textBright)",
 					fontWeight: 600,
-					borderBottomColor: "var(--chakra-colors-app-borderLight)",
+					background: "var(--chakra-colors-app-bgHover)",
 				},
 			}}
 			// marked output with raw HTML tokens stripped and links restricted to http(s)/mailto

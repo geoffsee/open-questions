@@ -221,6 +221,11 @@ function normalizeText(value: string) {
 	return value.trim().replace(/\s+/g, " ");
 }
 
+/** Trim edges but keep markdown structure (tables, lists, code fences). */
+function normalizeMultilineText(value: string) {
+	return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
 function hasUrl(value: string) {
 	return /https?:\/\/\S+/i.test(value);
 }
@@ -1311,9 +1316,9 @@ function createMcpServer(env?: Bindings) {
 					claimId,
 					agentId: normalizedAgentId,
 					title: title ? normalizeText(title) : null,
-					summary: normalizeText(summary),
-					approach: approach ? normalizeText(approach) : null,
-					evidence: evidence ? normalizeText(evidence) : null,
+					summary: normalizeMultilineText(summary),
+					approach: approach ? normalizeMultilineText(approach) : null,
+					evidence: evidence ? normalizeMultilineText(evidence) : null,
 					artifactUrl: artifactUrl ?? null,
 					confidence: confidence ?? null,
 				});
@@ -1426,7 +1431,7 @@ function createMcpServer(env?: Bindings) {
 				agentId: normalizeText(agentId),
 				kind,
 				title: title ? normalizeText(title) : null,
-				content: normalizeText(content),
+				content: normalizeMultilineText(content),
 				artifactUrl: artifactUrl ?? null,
 			});
 
