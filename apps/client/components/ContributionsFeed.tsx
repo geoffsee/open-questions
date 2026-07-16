@@ -15,6 +15,7 @@ import {
 	type ResearchEntry,
 	type SubmittedSolution,
 } from "../lib/agentResearch";
+import { MarkdownContent } from "./MarkdownContent";
 
 export interface ContributionProblem {
 	id: string;
@@ -166,45 +167,6 @@ function buildGroups(
 	return Array.from(groups.values());
 }
 
-function RichText({ children }: { children: string }) {
-	const parts = children.split(/(\*\*[^*]+\*\*|https?:\/\/[^\s]+)/g);
-
-	return (
-		<>
-			{parts.map((part) => {
-				if (part.startsWith("**") && part.endsWith("**")) {
-					return (
-						<Text
-							as="strong"
-							key={`bold:${part}`}
-							color="app.textBright"
-							fontWeight="600"
-						>
-							{part.slice(2, -2)}
-						</Text>
-					);
-				}
-
-				return /^https?:\/\//i.test(part) ? (
-					<Link
-						key={`link:${part}`}
-						href={part}
-						target="_blank"
-						rel="noopener noreferrer"
-						color="app.accentHover"
-						textDecoration="underline"
-						overflowWrap="anywhere"
-					>
-						{part}
-					</Link>
-				) : (
-					part
-				);
-			})}
-		</>
-	);
-}
-
 function truncateAtWord(value: string, limit: number) {
 	if (value.length <= limit) return value;
 	const slice = value.slice(0, limit);
@@ -226,14 +188,7 @@ function ExpandableCopy({
 
 	return (
 		<Box>
-			<Text
-				color="app.text"
-				fontSize="0.86rem"
-				lineHeight="1.75"
-				whiteSpace="pre-wrap"
-			>
-				<RichText>{visibleText}</RichText>
-			</Text>
+			<MarkdownContent>{visibleText}</MarkdownContent>
 			{isLong && (
 				<Button
 					mt={1}

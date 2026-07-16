@@ -21,6 +21,7 @@ import {
 	getEnrichment,
 	type Section as ProblemSection,
 } from "../lib/wiki";
+import { MarkdownContent } from "./MarkdownContent";
 import RiskBadge from "./RiskBadge";
 
 interface ProblemItemExpandedProps {
@@ -289,9 +290,11 @@ function ProblemItemExpanded({
 														{entry.title}
 													</Text>
 												)}
-												<Text color="app.text" fontSize="0.78rem" mb={1}>
-													{entry.content}
-												</Text>
+												<Box mb={1}>
+													<MarkdownContent fontSize="0.78rem">
+														{entry.content}
+													</MarkdownContent>
+												</Box>
 												<Text color="app.textDim" fontSize="0.7rem">
 													{new Date(entry.createdAt).toLocaleString()}
 												</Text>
