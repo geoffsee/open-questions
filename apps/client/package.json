@@ -9,6 +9,7 @@
 		"fetch-cases": "bun scripts/fetch-cases.ts",
 		"enrich-data": "bun scripts/enrich-data.ts",
 		"typecheck": "tsc --noEmit",
+		"test": "bun test",
 		"preview": "vike build && vike preview",
 		"prod": "vike build && node ./dist/server/index.mjs"
 	},

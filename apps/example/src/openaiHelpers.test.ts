@@ -98,6 +98,15 @@ describe("openai pickRandomProblemId", () => {
 			"did not return any available problem IDs",
 		);
 	});
+
+	test("returns the only candidate deterministically", () => {
+		expect(pickRandomProblemId(["solo-id"])).toBe("solo-id");
+	});
+
+	test("returns a member of multi-candidate lists", () => {
+		const candidates = ["a", "b", "c"];
+		expect(candidates).toContain(pickRandomProblemId(candidates));
+	});
 });
 
 describe("openai schemas", () => {

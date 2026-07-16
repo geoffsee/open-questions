@@ -48,4 +48,22 @@ describe("cursor example", () => {
 			env: { SEARXNG_URL: "http://127.0.0.1:8080" },
 		});
 	});
+
+	test("random pick instructions match the category-shuffle contract", () => {
+		const prompt = buildCatalogPrompt({
+			agentId: "cursor-agent-sdk-1",
+			leaseMinutes: 60,
+			pickMode: "random",
+			userBrief: "",
+			variant: "cursor",
+		});
+		expect(prompt).toContain("Pick mode: random.");
+		expect(prompt).toContain("structuredContent.categories");
+		expect(prompt).toContain(
+			"Do not bias toward the first item or toward astronomy.",
+		);
+		expect(prompt).toContain(
+			"Do not modify repository source files. Do not open a PR.",
+		);
+	});
 });

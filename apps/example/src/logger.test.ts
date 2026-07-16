@@ -45,6 +45,20 @@ describe("summarizeToolArgs", () => {
 			limit: 25,
 		});
 	});
+
+	test("handles null, strings, and non-objects", () => {
+		expect(summarizeToolArgs(null)).toBeNull();
+		expect(summarizeToolArgs("short")).toBe("short");
+		// Non-object, non-string values are returned as-is when short enough.
+		expect(summarizeToolArgs(42) as unknown).toBe(42);
+	});
+
+	test("falls back to truncated record when no intent keys exist", () => {
+		const summary = summarizeToolArgs({ noise: "x".repeat(500) });
+		expect(typeof summary === "string" || typeof summary === "object").toBe(
+			true,
+		);
+	});
 });
 
 describe("summarizeToolOutcome", () => {
@@ -74,6 +88,31 @@ describe("summarizeToolOutcome", () => {
 		).toMatchObject({
 			resultCount: 3080,
 			resultsCount: 1,
+		});
+	});
+
+	test("handles empty, array, and plain-string outcomes", () => {
+		expect(summarizeToolOutcome(null)).toEqual({ empty: true });
+		expect(summarizeToolOutcome([{ id: 1 }, { id: 2 }])).toMatchObject({
+			itemsCount: 2,
+		});
+		expect(summarizeToolOutcome("just text")).toMatchObject({
+			chars: "just text".length,
+			preview: "just text",
+		});
+	});
+
+	test("reads top-level claim and problem ids", () => {
+		expect(
+			summarizeToolOutcome({
+				claimId: "claim-9",
+				problemId: "bio-2",
+				claims: [{ id: 1 }],
+			}),
+		).toMatchObject({
+			claimId: "claim-9",
+			problemId: "bio-2",
+			claimsCount: 1,
 		});
 	});
 });

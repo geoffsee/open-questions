@@ -101,4 +101,20 @@ describe("buildCatalogPrompt", () => {
 		expect(prompt).toContain("Claim exactly this problemId: bio-42.");
 		expect(prompt).toContain("User brief: none supplied.");
 	});
+
+	test("embeds random category-shuffle guidance for anthropic", () => {
+		const prompt = buildCatalogPrompt({
+			...base,
+			pickMode: "random",
+			variant: "anthropic",
+		});
+		expect(prompt).toContain("structuredContent.categories");
+		expect(prompt).toContain("Choose one category uniformly at random");
+		expect(prompt).toContain(
+			"Do not bias toward the first item or toward astronomy.",
+		);
+		expect(prompt).toContain("Call pick_problem with agentId=agent-1");
+		expect(prompt).toContain("save_progress exactly once");
+		expect(prompt).toContain("Do not call submit_solution or release_problem.");
+	});
 });

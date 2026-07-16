@@ -36,7 +36,7 @@ type EnrichmentsPayload = {
 	problems?: Record<string, Enrichment>;
 };
 
-type ProblemRecord = {
+export type ProblemRecord = {
 	id: string;
 	category: string;
 	section: string;
@@ -44,9 +44,9 @@ type ProblemRecord = {
 	enrichment: Enrichment | null;
 };
 
-type ClaimStatus = "active" | "released" | "submitted" | "expired";
+export type ClaimStatus = "active" | "released" | "submitted" | "expired";
 
-type ProblemClaim = {
+export type ProblemClaim = {
 	claimId: string;
 	problemId: string;
 	agentId: string;
@@ -57,7 +57,7 @@ type ProblemClaim = {
 	releasedAt?: string;
 };
 
-type SubmittedSolution = {
+export type SubmittedSolution = {
 	submissionId: string;
 	claimId: string;
 	problemId: string;
@@ -71,7 +71,7 @@ type SubmittedSolution = {
 	confidence: number | null;
 };
 
-type ResearchEntryKind =
+export type ResearchEntryKind =
 	| "note"
 	| "reference"
 	| "hypothesis"
@@ -79,7 +79,7 @@ type ResearchEntryKind =
 	| "handoff"
 	| "candidate_approach";
 
-type ResearchEntry = {
+export type ResearchEntry = {
 	entryId: string;
 	problemId: string;
 	agentId: string;
@@ -90,21 +90,23 @@ type ResearchEntry = {
 	artifactUrl: string | null;
 };
 
-function isUsageResearchEntry(entry: ResearchEntry) {
+export function isUsageResearchEntry(entry: ResearchEntry) {
 	return entry.title?.toLowerCase().includes("token usage") ?? false;
 }
 
-function substantiveResearchEntries(entries: ResearchEntry[] | undefined) {
+export function substantiveResearchEntries(
+	entries: ResearchEntry[] | undefined,
+) {
 	return (entries ?? []).filter((entry) => !isUsageResearchEntry(entry));
 }
 
-type QueueState = {
+export type QueueState = {
 	claimsByProblemId: Record<string, ProblemClaim>;
 	solutionsByProblemId: Record<string, SubmittedSolution[]>;
 	researchEntriesByProblemId: Record<string, ResearchEntry[]>;
 };
 
-type QueueSnapshot = {
+export type QueueSnapshot = {
 	activeClaims: ProblemClaim[];
 	submissions: SubmittedSolution[];
 	recentResearchEntries: ResearchEntry[];
@@ -161,8 +163,6 @@ function getLocalStatePath() {
 	}
 }
 
-const LOCAL_STATE_PATH = getLocalStatePath();
-
 const ALLOWED_PATTERNS = [
 	/^\/data\/(?:problems|enrichments|news|cases)\.json$/,
 	/^\/data\/news-history\/(?:index|\d{4}-\d{2}-\d{2})\.json$/,
@@ -205,7 +205,7 @@ function getSearxngOrigin() {
 	);
 }
 
-function isAllowedPath(pathname: string) {
+export function isAllowedPath(pathname: string) {
 	return ALLOWED_PATTERNS.some((pattern) => pattern.test(pathname));
 }
 
@@ -217,16 +217,16 @@ function jsonError(message: string, status: number) {
 	return Response.json({ error: message }, { status });
 }
 
-function normalizeText(value: string) {
+export function normalizeText(value: string) {
 	return value.trim().replace(/\s+/g, " ");
 }
 
 /** Trim edges but keep markdown structure (tables, lists, code fences). */
-function normalizeMultilineText(value: string) {
+export function normalizeMultilineText(value: string) {
 	return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
 }
 
-function hasUrl(value: string) {
+export function hasUrl(value: string) {
 	return /https?:\/\/\S+/i.test(value);
 }
 
@@ -248,7 +248,7 @@ const artifactUrlSchema = z
 		},
 	);
 
-function slugify(value: string) {
+export function slugify(value: string) {
 	return value
 		.toLowerCase()
 		.replace(/[^a-z0-9]+/g, "-")
@@ -256,7 +256,7 @@ function slugify(value: string) {
 		.slice(0, 40);
 }
 
-function stableHash(value: string) {
+export function stableHash(value: string) {
 	let hash = 2166136261;
 
 	for (let i = 0; i < value.length; i += 1) {
@@ -267,7 +267,7 @@ function stableHash(value: string) {
 	return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function makeProblemId(category: string, section: string, text: string) {
+export function makeProblemId(category: string, section: string, text: string) {
 	const material = `${category}::${section}::${normalizeText(text)}`;
 	return `${slugify(category)}-${slugify(section)}-${stableHash(material)}`;
 }
@@ -280,7 +280,7 @@ function textContent(text: string) {
 	return [{ type: "text" as const, text }];
 }
 
-function cloneQueueState(state: QueueState): QueueState {
+export function cloneQueueState(state: QueueState): QueueState {
 	const researchEntriesByProblemId = state.researchEntriesByProblemId ?? {};
 
 	return {
@@ -306,9 +306,10 @@ function cloneQueueState(state: QueueState): QueueState {
 }
 
 function readLocalQueueState() {
-	if (LOCAL_STATE_PATH && existsSync(LOCAL_STATE_PATH)) {
+	const localStatePath = getLocalStatePath();
+	if (localStatePath && existsSync(localStatePath)) {
 		try {
-			return JSON.parse(readFileSync(LOCAL_STATE_PATH, "utf-8")) as QueueState;
+			return JSON.parse(readFileSync(localStatePath, "utf-8")) as QueueState;
 		} catch {
 			return cloneQueueState(localQueueState);
 		}
@@ -320,17 +321,18 @@ function readLocalQueueState() {
 function writeLocalQueueState(state: QueueState) {
 	localQueueState = cloneQueueState(state);
 
-	if (!LOCAL_STATE_PATH) return;
+	const localStatePath = getLocalStatePath();
+	if (!localStatePath) return;
 
 	try {
-		mkdirSync(dirname(LOCAL_STATE_PATH), { recursive: true });
-		writeFileSync(LOCAL_STATE_PATH, JSON.stringify(localQueueState, null, 2));
+		mkdirSync(dirname(localStatePath), { recursive: true });
+		writeFileSync(localStatePath, JSON.stringify(localQueueState, null, 2));
 	} catch {
 		// Ignore local persistence failures and continue serving from memory.
 	}
 }
 
-function pruneExpiredClaims(state: QueueState) {
+export function pruneExpiredClaims(state: QueueState) {
 	const now = Date.now();
 	let changed = false;
 
@@ -351,7 +353,7 @@ function pruneExpiredClaims(state: QueueState) {
 	return changed;
 }
 
-function createQueueSnapshot(state: QueueState): QueueSnapshot {
+export function createQueueSnapshot(state: QueueState): QueueSnapshot {
 	const researchCountsByProblemId = Object.fromEntries(
 		Object.entries(state.researchEntriesByProblemId).map(
 			([problemId, entries]) => [
@@ -387,7 +389,7 @@ function createQueueSnapshot(state: QueueState): QueueSnapshot {
 	};
 }
 
-function createClaimRecord(
+export function createClaimRecord(
 	problemId: string,
 	agentId: string,
 	leaseMinutes: number,
@@ -406,7 +408,7 @@ function createClaimRecord(
 	};
 }
 
-function createSubmissionRecord(
+export function createSubmissionRecord(
 	claim: ProblemClaim,
 	input: {
 		title: string | null;
@@ -432,7 +434,7 @@ function createSubmissionRecord(
 	};
 }
 
-function createResearchEntryRecord(input: {
+export function createResearchEntryRecord(input: {
 	problemId: string;
 	agentId: string;
 	kind: ResearchEntryKind;
@@ -812,7 +814,7 @@ async function summarizeProblem(problem: ProblemRecord, state: QueueState) {
 	};
 }
 
-async function filterProblems(
+export async function filterProblems(
 	problems: ProblemRecord[],
 	state: QueueState,
 	filters: {
@@ -865,7 +867,10 @@ async function filterProblems(
 	});
 }
 
-function createCatalogSummary(problems: ProblemRecord[], state: QueueState) {
+export function createCatalogSummary(
+	problems: ProblemRecord[],
+	state: QueueState,
+) {
 	const categories = problems.reduce<Record<string, number>>((acc, problem) => {
 		acc[problem.category] = (acc[problem.category] ?? 0) + 1;
 		return acc;
@@ -1911,6 +1916,16 @@ app.get("/data/*", async (c) => {
 });
 
 app.notFound(() => jsonError("Not found.", 404));
+
+/** Test helper: clear in-memory problem cache and queue state. */
+export function resetLocalRuntimeStateForTests() {
+	cachedProblems = undefined;
+	localQueueState = {
+		claimsByProblemId: {},
+		solutionsByProblemId: {},
+		researchEntriesByProblemId: {},
+	};
+}
 
 export default {
 	fetch: app.fetch,

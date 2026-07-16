@@ -32,6 +32,25 @@ describe("openai example", () => {
 			candidateIds: ["math-001", "bio-002"],
 		});
 		expect(["math-001", "bio-002"]).toContain(random.chosenProblemId);
+		expect(random.reason).toContain("randomly");
+	});
+
+	test("rejects agent pick mode without a selector agent", () => {
+		expect(() =>
+			resolveChosenProblemId({
+				pickMode: "agent",
+				candidateIds: ["math-001"],
+			}),
+		).toThrow("OpenAI selector agent is required");
+	});
+
+	test("rejects random mode with an empty shortlist", () => {
+		expect(() =>
+			resolveChosenProblemId({
+				pickMode: "random",
+				candidateIds: [],
+			}),
+		).toThrow("did not return any available problem IDs");
 	});
 
 	test("validates research checkpoints used by the kickoff agent", () => {

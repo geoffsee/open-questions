@@ -28,6 +28,32 @@ describe("anthropic example", () => {
 			"Call pick_problem with agentId=claude-agent-sdk-1",
 		);
 		expect(prompt).toContain("Desired outcome: claim one problem");
+		expect(prompt).toContain("structuredContent.categories");
+		expect(prompt).toContain("Choose one category uniformly at random");
 		expect(prompt).not.toContain("Do not open a PR.");
+	});
+
+	test("specific pick path names the exact problem id", () => {
+		const prompt = buildCatalogPrompt({
+			agentId: "claude-agent-sdk-1",
+			leaseMinutes: 30,
+			pickMode: "specific",
+			specificProblemId: "math-001",
+			userBrief: "",
+			variant: "anthropic",
+		});
+		expect(prompt).toContain("Claim exactly this problemId: math-001.");
+		expect(prompt).toContain("leaseMinutes=30");
+	});
+
+	test("allowlist covers claim lifecycle tools used by the runner", () => {
+		expect(ALLOWED_MCP_TOOLS).toEqual(
+			expect.arrayContaining([
+				"mcp__unsolved__list_problems",
+				"mcp__unsolved__pick_problem",
+				"mcp__unsolved__save_progress",
+				"mcp__unsolved__list_claims",
+			]),
+		);
 	});
 });

@@ -1,11 +1,19 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
 	extractCategoriesFromCatalog,
 	extractCategoriesFromListResult,
 	extractProblemIdsFromListResult,
+	listAvailableProblemIds,
+	listCatalogCategories,
 	pickRandomCategory,
 	resolveRuntimePick,
 } from "./resolvePick";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+	globalThis.fetch = originalFetch;
+});
 
 describe("extractProblemIdsFromListResult", () => {
 	test("reads structuredContent items", () => {
@@ -18,6 +26,16 @@ describe("extractProblemIdsFromListResult", () => {
 				},
 			}),
 		).toEqual(["math-001", "bio-002"]);
+	});
+
+	test("reads top-level structuredContent when result wrapper is absent", () => {
+		expect(
+			extractProblemIdsFromListResult({
+				structuredContent: {
+					items: [{ id: "math-001" }, { id: 12 }, { id: "  " }],
+				},
+			}),
+		).toEqual(["math-001"]);
 	});
 
 	test("falls back to numbered text content", () => {
@@ -36,6 +54,14 @@ describe("extractProblemIdsFromListResult", () => {
 				},
 			}),
 		).toEqual(["math-001", "bio-002"]);
+	});
+
+	test("returns empty when neither items nor matching text exist", () => {
+		expect(
+			extractProblemIdsFromListResult({
+				result: { content: [{ type: "text", text: "nothing useful" }] },
+			}),
+		).toEqual([]);
 	});
 });
 
@@ -71,6 +97,10 @@ describe("extractCategoriesFromListResult", () => {
 			}),
 		).toEqual(["astronomy", "biology"]);
 	});
+
+	test("returns empty when categories and items are missing", () => {
+		expect(extractCategoriesFromListResult({})).toEqual([]);
+	});
 });
 
 describe("extractCategoriesFromCatalog", () => {
@@ -92,6 +122,15 @@ describe("extractCategoriesFromCatalog", () => {
 				},
 			}),
 		).toEqual(["astronomy", "biology"]);
+	});
+
+	test("returns empty for missing or empty catalog payloads", () => {
+		expect(extractCategoriesFromCatalog({})).toEqual([]);
+		expect(
+			extractCategoriesFromCatalog({
+				contents: [{ text: JSON.stringify({ totalProblems: 0 }) }],
+			}),
+		).toEqual([]);
 	});
 });
 
@@ -136,7 +175,6 @@ describe("resolveRuntimePick", () => {
 	});
 
 	test("resolves random mode via shuffled category then problem", async () => {
-		const originalFetch = globalThis.fetch;
 		const calls: Array<{ method?: string; args?: Record<string, unknown> }> =
 			[];
 
@@ -213,32 +251,25 @@ describe("resolveRuntimePick", () => {
 			);
 		}) as unknown as typeof fetch;
 
-		try {
-			const resolved = await resolveRuntimePick({
-				pickMode: "random",
-				mcpUrl: "https://example.test/mcp",
-			});
-			expect(resolved.pickMode).toBe("specific");
-			expect(resolved.poolSize).toBe(2);
-			expect(resolved.category).toBeTruthy();
-			expect(["astronomy", "biology", "chemistry"]).toContain(
-				resolved.category as string,
-			);
-			expect([
-				`${resolved.category}-001`,
-				`${resolved.category}-002`,
-			]).toContain(resolved.specificProblemId as string);
-			expect(calls[0]?.method).toBe("tools/call");
-			expect(calls[0]?.args?.category).toBeUndefined();
-			expect(calls[1]?.args?.category).toBe(resolved.category);
-		} finally {
-			globalThis.fetch = originalFetch;
-		}
+		const resolved = await resolveRuntimePick({
+			pickMode: "random",
+			mcpUrl: "https://example.test/mcp",
+		});
+		expect(resolved.pickMode).toBe("specific");
+		expect(resolved.poolSize).toBe(2);
+		expect(resolved.category).toBeTruthy();
+		expect(["astronomy", "biology", "chemistry"]).toContain(
+			resolved.category as string,
+		);
+		expect([`${resolved.category}-001`, `${resolved.category}-002`]).toContain(
+			resolved.specificProblemId as string,
+		);
+		expect(calls[0]?.method).toBe("tools/call");
+		expect(calls[0]?.args?.category).toBeUndefined();
+		expect(calls[1]?.args?.category).toBe(resolved.category);
 	});
 
 	test("falls back to catalog categories when list omits them", async () => {
-		const originalFetch = globalThis.fetch;
-
 		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
 			const body = JSON.parse(String(init?.body ?? "{}")) as {
 				method?: string;
@@ -291,15 +322,220 @@ describe("resolveRuntimePick", () => {
 			);
 		}) as unknown as typeof fetch;
 
-		try {
-			const resolved = await resolveRuntimePick({
+		const resolved = await resolveRuntimePick({
+			pickMode: "random",
+			mcpUrl: "https://example.test/mcp",
+		});
+		expect(["biology", "chemistry"]).toContain(resolved.category as string);
+		expect(resolved.specificProblemId).toBe(`${resolved.category}-001`);
+	});
+
+	test("skips empty categories until a non-empty pool is found", async () => {
+		const categoriesSeen: string[] = [];
+
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body ?? "{}")) as {
+				method?: string;
+				params?: { arguments?: Record<string, unknown> };
+			};
+
+			const args = body.params?.arguments ?? {};
+			if (!args.category) {
+				return new Response(
+					JSON.stringify({
+						result: {
+							structuredContent: {
+								items: [{ id: "astronomy-1" }],
+								categories: { empty: 1, filled: 1 },
+								totalMatched: 2,
+							},
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+
+			const category = String(args.category);
+			categoriesSeen.push(category);
+			const items =
+				category === "filled" ? [{ id: "filled-001", category: "filled" }] : [];
+			return new Response(
+				JSON.stringify({
+					result: {
+						structuredContent: {
+							items,
+							categories: { [category]: items.length },
+							totalMatched: items.length,
+						},
+					},
+				}),
+				{ status: 200 },
+			);
+		}) as unknown as typeof fetch;
+
+		const resolved = await resolveRuntimePick({
+			pickMode: "random",
+			mcpUrl: "https://example.test/mcp",
+			limit: 10,
+		});
+
+		expect(resolved).toEqual({
+			pickMode: "specific",
+			specificProblemId: "filled-001",
+			poolSize: 1,
+			category: "filled",
+		});
+		expect(categoriesSeen).toContain("filled");
+	});
+
+	test("throws when every category pool is empty", async () => {
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body ?? "{}")) as {
+				method?: string;
+				params?: { arguments?: Record<string, unknown> };
+			};
+			const args = body.params?.arguments ?? {};
+			if (!args.category) {
+				return new Response(
+					JSON.stringify({
+						result: {
+							structuredContent: {
+								items: [],
+								categories: { astronomy: 1, biology: 1 },
+								totalMatched: 0,
+							},
+						},
+					}),
+					{ status: 200 },
+				);
+			}
+			return new Response(
+				JSON.stringify({
+					result: {
+						structuredContent: {
+							items: [],
+							categories: { [String(args.category)]: 0 },
+							totalMatched: 0,
+						},
+					},
+				}),
+				{ status: 200 },
+			);
+		}) as unknown as typeof fetch;
+
+		await expect(
+			resolveRuntimePick({
 				pickMode: "random",
 				mcpUrl: "https://example.test/mcp",
-			});
-			expect(["biology", "chemistry"]).toContain(resolved.category as string);
-			expect(resolved.specificProblemId).toBe(`${resolved.category}-001`);
-		} finally {
-			globalThis.fetch = originalFetch;
-		}
+			}),
+		).rejects.toThrow("No available problems found in any category.");
+	});
+
+	test("requires a problem id for specific mode", async () => {
+		await expect(
+			resolveRuntimePick({
+				pickMode: "specific",
+				specificProblemId: null,
+				mcpUrl: "https://example.test/mcp",
+			}),
+		).rejects.toThrow("UNSOLVED_PROBLEM_ID is required");
+	});
+});
+
+describe("listAvailableProblemIds / listCatalogCategories", () => {
+	test("passes category and limit to list_problems", async () => {
+		let seenBody: Record<string, unknown> | null = null;
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			seenBody = JSON.parse(String(init?.body ?? "{}")) as Record<
+				string,
+				unknown
+			>;
+			return new Response(
+				JSON.stringify({
+					result: {
+						structuredContent: {
+							items: [{ id: "bio-1", category: "biology" }],
+							categories: { biology: 1 },
+						},
+					},
+				}),
+				{ status: 200 },
+			);
+		}) as unknown as typeof fetch;
+
+		const listed = await listAvailableProblemIds(
+			"https://example.test/mcp",
+			7,
+			"biology",
+		);
+		expect(listed.candidateIds).toEqual(["bio-1"]);
+		expect(listed.categories).toEqual(["biology"]);
+		expect(seenBody).toMatchObject({
+			method: "tools/call",
+			params: {
+				name: "list_problems",
+				arguments: { limit: 7, status: "available", category: "biology" },
+			},
+		});
+	});
+
+	test("parses SSE data payloads from MCP responses", async () => {
+		globalThis.fetch = (async () =>
+			new Response(
+				[
+					"event: message",
+					`data: ${JSON.stringify({
+						result: {
+							structuredContent: {
+								items: [{ id: "math-9" }],
+								categories: { mathematics: 1 },
+							},
+						},
+					})}`,
+					"",
+				].join("\n"),
+				{ status: 200 },
+			)) as unknown as typeof fetch;
+
+		const listed = await listAvailableProblemIds("https://example.test/mcp");
+		expect(listed.candidateIds).toEqual(["math-9"]);
+	});
+
+	test("surfaces MCP HTTP failures", async () => {
+		globalThis.fetch = (async () =>
+			new Response("boom", { status: 502 })) as unknown as typeof fetch;
+
+		await expect(
+			listAvailableProblemIds("https://example.test/mcp"),
+		).rejects.toThrow("tools/call failed (502)");
+	});
+
+	test("reads catalog categories from resources/read", async () => {
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body ?? "{}")) as {
+				method?: string;
+				params?: { uri?: string };
+			};
+			expect(body.method).toBe("resources/read");
+			expect(body.params?.uri).toBe("unsolved://catalog");
+			return new Response(
+				JSON.stringify({
+					result: {
+						contents: [
+							{
+								text: JSON.stringify({
+									categories: { physics: 3, biology: 0 },
+								}),
+							},
+						],
+					},
+				}),
+				{ status: 200 },
+			);
+		}) as unknown as typeof fetch;
+
+		await expect(
+			listCatalogCategories("https://example.test/mcp"),
+		).resolves.toEqual(["physics"]);
 	});
 });
