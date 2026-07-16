@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
 const MCP_URL = process.env.UNSOLVED_MCP_URL || "https://unsolved-problems-api.seemueller.workers.dev/mcp";
@@ -10,6 +11,11 @@ const USER_GOAL = process.env.UNSOLVED_USER_GOAL || "";
 const USER_BACKGROUND = process.env.UNSOLVED_USER_BACKGROUND || "";
 const USER_CONSTRAINTS = process.env.UNSOLVED_USER_CONSTRAINTS || "";
 const USER_CONTEXT = process.env.UNSOLVED_USER_CONTEXT || "";
+
+// A .mcp.json at the project root (cwd) is materialized from the MCP_CONFIG
+// secret in CI. The Agent SDK only loads it when the "project" setting source
+// is enabled, so opt in exactly when that file is present.
+const HAS_PROJECT_MCP_CONFIG = existsSync(".mcp.json");
 
 const MCP_SERVER = "unsolved";
 const ALLOWED_MCP_TOOLS = [
@@ -116,7 +122,7 @@ async function main() {
       disallowedTools: ["Bash", "Write", "Edit", "Read", "Glob", "Grep", "WebSearch", "WebFetch", "Agent", "Skill"],
       permissionMode: "dontAsk",
       maxTurns: 16,
-      settingSources: [],
+      settingSources: HAS_PROJECT_MCP_CONFIG ? ["project"] : [],
     },
   })) {
     if (message.type === "system" && message.subtype === "init") {
