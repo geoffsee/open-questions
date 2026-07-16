@@ -65,7 +65,7 @@ const KIND_LABELS: Record<string, string> = {
 	candidate_approach: "Candidate approach",
 };
 
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
 	if (!dateStr) return null;
 	const date = new Date(dateStr);
 	if (Number.isNaN(date.getTime())) return dateStr;
@@ -306,8 +306,10 @@ function ContributionUpdate({ entry }: { entry: ContributionItem }) {
 				>
 					{submission
 						? "Candidate solution"
-						: (KIND_LABELS[research?.kind] ??
-							research?.kind.replaceAll("_", " "))}
+						: research?.kind
+							? (KIND_LABELS[research.kind] ??
+								research.kind.replaceAll("_", " "))
+							: "Update"}
 				</Badge>
 				<Badge
 					bg="transparent"
@@ -341,7 +343,7 @@ function ContributionUpdate({ entry }: { entry: ContributionItem }) {
 			</Heading>
 
 			<ExpandableCopy>
-				{submission ? submission.summary : research?.content}
+				{submission ? submission.summary : (research?.content ?? "")}
 			</ExpandableCopy>
 
 			{submission?.approach && (

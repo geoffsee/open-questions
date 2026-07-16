@@ -9,3 +9,5 @@ fi
 bunx biome check --write --staged --files-ignore-unknown=true --no-errors-on-unmatched
 
 git update-index --again
+
+bun run --workspaces typecheck
