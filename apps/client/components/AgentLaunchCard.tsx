@@ -107,8 +107,8 @@ export default function AgentLaunchCard() {
               Send an Agent after one of these problems
             </Heading>
             <Text color="app.text" fontSize="0.92rem" lineHeight="1.7" maxW="33rem">
-              Pick a provider, run the shell snippet, and the launcher will claim a problem through MCP and save an
-              initial checkpoint automatically.
+              Pick a provider, run the shell snippet, and the launcher will claim a problem through MCP and save a
+              source-preserving research update automatically.
             </Text>
           </Box>
 

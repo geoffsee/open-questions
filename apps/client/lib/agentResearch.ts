@@ -5,6 +5,7 @@ export interface LiveClaim {
   claimId: string;
   problemId: string;
   agentId: string;
+  pickedUpAt?: string;
   leaseExpiresAt: string;
   status: string;
 }

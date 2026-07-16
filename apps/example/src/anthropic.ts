@@ -74,11 +74,13 @@ function buildPrompt() {
     "Workflow:",
     `1. Select one available problem according to the pick instructions.`,
     `2. Call pick_problem with agentId=${AGENT_ID}, leaseMinutes=${LEASE_MINUTES}, and the chosen problemId.`,
-    "3. Call search_web for current background on the problem.",
-    "4. Call save_progress with:",
-    "   - kind: note",
-    '   - title: "Initial attack plan"',
-    "   - a short skeptical first-pass checkpoint (do not claim the problem is solved)",
+    "3. Call search_web for a credible primary source or authoritative review relevant to the problem.",
+    "4. Call save_progress exactly once with a durable research contribution, not a generic plan or status report:",
+    "   - choose the most accurate kind (reference, hypothesis, failed_attempt, candidate_approach, or note)",
+    "   - use a specific title that says what was learned or proposed",
+    "   - in content, state a concrete claim or result, its supporting basis, the main limitation, and the next discriminating test",
+    "   - put the exact best source URL from search_web in artifactUrl; if no credible source was found, say so explicitly and do not use kind=reference",
+    "   - do not claim the open problem is solved",
     "5. Stop after saving progress. Do not call submit_solution or release_problem.",
     "",
     userBrief ? `User brief:\n${userBrief}` : "User brief: none supplied.",
@@ -100,7 +102,7 @@ async function main() {
     options: {
       model: MODEL,
       systemPrompt:
-        "You are a careful research agent. Prefer concrete, skeptical checkpoints over hype. Use MCP tools to claim work and save progress.",
+        "You are a careful research agent. Publish source-preserving, concrete research contributions rather than generic progress notes. Be skeptical and use MCP tools to claim work and save progress.",
       mcpServers: {
         [MCP_SERVER]: {
           type: "http",

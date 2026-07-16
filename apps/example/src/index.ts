@@ -17,6 +17,13 @@ const SelectionSchema = z.object({
   reason: z.string(),
 });
 
+const ResearchCheckpointSchema = z.object({
+  kind: z.enum(["note", "reference", "hypothesis", "failed_attempt", "candidate_approach"]),
+  title: z.string(),
+  content: z.string(),
+  sourceUrl: z.string().url().nullable(),
+});
+
 function getText(content: Array<{ type: string; text?: string }>) {
   return content
     .filter((item) => item.type === "text" && typeof item.text === "string")
@@ -197,15 +204,18 @@ async function main() {
       name: "Research Kickoff",
       model: MODEL,
       mcpServers: [mcpServer],
+      outputType: ResearchCheckpointSchema,
       instructions: [
         "You are starting work on a newly claimed unsolved problem.",
         "Follow the user's brief where it helps produce a better first pass.",
         "Read any prior shared research before proposing the next step.",
-        "Use the search_web MCP tool to find current sources or background before writing the checkpoint.",
-        "Write one short checkpoint note that preserves a plausible first attack plan.",
-        "Mention the most useful source direction you found, but do not overclaim that a hard open problem is solved.",
-        "Keep it concrete and skeptical.",
-        "Respond with plain text only.",
+        "Use the search_web MCP tool to find a credible primary source or authoritative review before writing the update.",
+        "Produce a durable research contribution, not a generic plan or status report.",
+        "The content must state: (1) a concrete claim or result, (2) what supports it, (3) the main limitation or uncertainty, and (4) the next discriminating test or calculation.",
+        "Choose the most accurate contribution kind. Use reference only when sourceUrl contains the referenced source.",
+        "Preserve the exact best source URL in sourceUrl. Use null only when the search returned no credible source, and say that explicitly in content.",
+        "Do not overclaim that a hard open problem is solved.",
+        "Keep the title specific and the content concise, skeptical, and understandable without the search transcript.",
       ].join("\n"),
     });
 
@@ -216,18 +226,19 @@ async function main() {
         `Field: ${problem.category} / ${problem.section}`,
         userBrief ? `User brief:\n${userBrief}` : "User brief: none supplied.",
         priorResearch ? `Recent shared research:\n${priorResearch}` : "Recent shared research: none yet.",
-        "Write a brief first-pass research checkpoint for the shared log.",
+        "Write one useful, source-preserving research update for the shared log.",
       ].join("\n"),
     );
 
-    const kickoffNote = typeof kickoff.finalOutput === "string" ? kickoff.finalOutput.trim() : "";
-    if (kickoffNote) {
+    const checkpoint = kickoff.finalOutput;
+    if (checkpoint?.content.trim()) {
       await mcpServer.callTool("save_progress", {
         problemId: chosenProblemId,
         agentId: AGENT_ID,
-        kind: "note",
-        title: "Initial attack plan",
-        content: kickoffNote,
+        kind: checkpoint.kind,
+        title: checkpoint.title.trim(),
+        content: checkpoint.content.trim(),
+        ...(checkpoint.sourceUrl ? { artifactUrl: checkpoint.sourceUrl } : {}),
       });
     }
 
@@ -246,7 +257,7 @@ async function main() {
           pickMode: PICK_MODE,
           userGoal: USER_GOAL || null,
           priorResearchCount: problem.researchEntries?.length ?? 0,
-          kickoffNote: kickoffNote ?? null,
+          researchUpdate: checkpoint ?? null,
         },
         null,
         2,

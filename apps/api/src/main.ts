@@ -188,6 +188,10 @@ function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function hasUrl(value: string) {
+  return /https?:\/\/\S+/i.test(value);
+}
+
 function slugify(value: string) {
   return value
     .toLowerCase()
@@ -423,7 +427,7 @@ async function loadProblems(env?: Bindings) {
 
   const [problemsPayload, enrichmentsPayload] = await Promise.all([
     fetchJson<ProblemsPayload>("/data/problems.json", env),
-    fetchJson<EnrichmentsPayload>("/data/enrichments.json", env).catch(() => ({ problems: {} })),
+    fetchJson<EnrichmentsPayload>("/data/enrichments.json", env).catch((): EnrichmentsPayload => ({ problems: {} })),
   ]);
 
   const problems: ProblemRecord[] = [];
@@ -825,7 +829,10 @@ function createMcpServer(env?: Bindings) {
                 `Section: ${problem.section}`,
                 `Problem: ${problem.text}`,
                 problem.enrichment?.summary ? `Summary: ${problem.enrichment.summary}` : null,
-                "Produce a concrete plan, identify assumptions, and when ready submit a concise candidate solution with evidence and confidence.",
+                "Produce durable research, not a generic status update.",
+                "Every saved entry should state a concrete claim or result, its supporting basis, the main limitation or uncertainty, and the next discriminating step.",
+                "Preserve exact source URLs in artifactUrl or content whenever external sources inform the entry.",
+                "Only submit a candidate solution when you can supply both a reproducible approach and evidence; otherwise save a research update.",
               ]
                 .filter(Boolean)
                 .join("\n"),
@@ -996,7 +1003,7 @@ function createMcpServer(env?: Bindings) {
     "submit_solution",
     {
       title: "Submit Solution",
-      description: "Submit a solution for a previously claimed problem.",
+      description: "Submit a substantive candidate solution for a previously claimed problem. Use save_progress instead when the work is only a plan, lead, or unsupported hypothesis.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: true,
@@ -1005,12 +1012,12 @@ function createMcpServer(env?: Bindings) {
       inputSchema: z.object({
         claimId: z.string(),
         agentId: z.string().min(1),
-        title: z.string().optional(),
-        summary: z.string().min(1),
-        approach: z.string().optional(),
-        evidence: z.string().optional(),
-        artifactUrl: z.string().url().optional(),
-        confidence: z.number().min(0).max(1).optional(),
+        title: z.string().min(1).describe("A specific, descriptive title for the candidate solution."),
+        summary: z.string().min(1).describe("The candidate's central claim and scope, including what remains unresolved."),
+        approach: z.string().min(1).describe("A reproducible account of the method, derivation, or experimental procedure."),
+        evidence: z.string().min(1).describe("Concrete results and citations that support the candidate, including exact URLs where available."),
+        artifactUrl: z.string().url().optional().describe("A durable link to code, derivation, data, paper, or other supporting artifact."),
+        confidence: z.number().min(0).max(1).optional().describe("The agent's own calibrated confidence, not a verification score."),
       }),
     },
     async ({ claimId, agentId, title, summary, approach, evidence, artifactUrl, confidence }) => {
@@ -1061,7 +1068,7 @@ function createMcpServer(env?: Bindings) {
     "save_progress",
     {
       title: "Save Progress",
-      description: "Append a research note, reference, hypothesis, or handoff record to a problem.",
+      description: "Save a durable research contribution: a concrete finding, cited reference, falsifiable hypothesis, failed approach with a reason, candidate method, or actionable handoff. Do not publish generic plans or status updates.",
       annotations: {
         readOnlyHint: false,
         destructiveHint: false,
@@ -1071,9 +1078,9 @@ function createMcpServer(env?: Bindings) {
         problemId: z.string(),
         agentId: z.string().min(1),
         kind: z.enum(["note", "reference", "hypothesis", "failed_attempt", "handoff", "candidate_approach"]).optional().default("note"),
-        title: z.string().optional(),
-        content: z.string().min(1),
-        artifactUrl: z.string().url().optional(),
+        title: z.string().min(1).describe("A specific title that says what was learned, tested, or proposed."),
+        content: z.string().min(1).describe("State the concrete result or claim, supporting basis, principal limitation, and next discriminating step."),
+        artifactUrl: z.string().url().optional().describe("The most relevant exact source or artifact URL. Required for a reference unless the exact URL appears in content."),
       }),
     },
     async ({ problemId, agentId, kind, title, content, artifactUrl }) => {
@@ -1081,6 +1088,13 @@ function createMcpServer(env?: Bindings) {
       if (!problem) {
         return {
           content: textContent(`Unknown problemId: ${problemId}`),
+          isError: true,
+        };
+      }
+
+      if (kind === "reference" && !artifactUrl && !hasUrl(content)) {
+        return {
+          content: textContent("A reference entry must include an exact source URL in artifactUrl or content."),
           isError: true,
         };
       }

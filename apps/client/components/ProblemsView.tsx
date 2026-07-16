@@ -21,17 +21,29 @@ interface ProblemItemExpandedProps {
   text: string;
   index: number;
   liveProblemState: LiveProblemState | null;
+  focused: boolean;
 }
 
-function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemState }: ProblemItemExpandedProps) {
+function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemState, focused }: ProblemItemExpandedProps) {
   const enrichment = getEnrichment(text);
   const risk = getProblemRisk(categoryKey, section, text, enrichment);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(focused);
   const [researchEntries, setResearchEntries] = useState<ResearchEntry[] | null>(null);
   const [loadingResearch, setLoadingResearch] = useState(false);
   const [researchError, setResearchError] = useState<string | null>(null);
   const problemId = makeProblemId(categoryKey, section, text);
-  const canExpand = Boolean(enrichment || liveProblemState?.activeClaim || liveProblemState?.researchCount || liveProblemState?.hasSubmissions);
+  const canExpand = Boolean(focused || enrichment || liveProblemState?.activeClaim || liveProblemState?.researchCount || liveProblemState?.hasSubmissions);
+
+  useEffect(() => {
+    if (!focused) return;
+
+    setExpanded(true);
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(problemId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focused, problemId]);
 
   useEffect(() => {
     if (!expanded || researchEntries || loadingResearch) return;
@@ -64,13 +76,17 @@ function ProblemItemExpanded({ categoryKey, section, text, index, liveProblemSta
   return (
     <Box
       as="li"
+      id={problemId}
+      aria-current={focused ? "true" : undefined}
       px={4}
       py={2.5}
       fontSize="0.88rem"
       lineHeight="1.65"
       color="app.text"
       borderLeft="2px solid"
-      borderLeftColor={expanded && enrichment ? "app.accent" : "transparent"}
+      borderLeftColor={focused || (expanded && enrichment) ? "app.accent" : "transparent"}
+      bg={focused ? "app.bgHover" : "transparent"}
+      scrollMarginTop="220px"
       transition="all 0.15s"
       cursor={canExpand ? "pointer" : "default"}
       _hover={{
@@ -263,10 +279,18 @@ interface SectionProps {
   problems: string[];
   defaultOpen: boolean;
   liveProblemStateById: Record<string, LiveProblemState>;
+  focusedProblemId: string | null;
 }
 
-function Section({ categoryKey, heading, problems, defaultOpen, liveProblemStateById }: SectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+function Section({ categoryKey, heading, problems, defaultOpen, liveProblemStateById, focusedProblemId }: SectionProps) {
+  const containsFocusedProblem = Boolean(
+    focusedProblemId && problems.some((problem) => makeProblemId(categoryKey, heading, problem) === focusedProblemId),
+  );
+  const [open, setOpen] = useState(defaultOpen || containsFocusedProblem);
+
+  useEffect(() => {
+    if (containsFocusedProblem) setOpen(true);
+  }, [containsFocusedProblem]);
 
   return (
     <Box mb={2}>
@@ -323,6 +347,7 @@ function Section({ categoryKey, heading, problems, defaultOpen, liveProblemState
               text={p}
               index={i}
               liveProblemState={liveProblemStateById[makeProblemId(categoryKey, heading, p)] ?? null}
+              focused={makeProblemId(categoryKey, heading, p) === focusedProblemId}
             />
           ))}
         </Box>
@@ -341,6 +366,7 @@ interface ProblemsViewProps {
   search: string;
   onBack: () => void;
   liveProblemStateById: Record<string, LiveProblemState>;
+  focusedProblemId: string | null;
 }
 
 export default function ProblemsView({
@@ -353,6 +379,7 @@ export default function ProblemsView({
   search,
   onBack,
   liveProblemStateById,
+  focusedProblemId,
 }: ProblemsViewProps) {
   const wikiUrl = `https://en.wikipedia.org/wiki/${category.page}`;
 
@@ -405,6 +432,7 @@ export default function ProblemsView({
               problems={sec.problems}
               defaultOpen={i === 0}
               liveProblemStateById={liveProblemStateById}
+              focusedProblemId={focusedProblemId}
             />
           ))}
         </>

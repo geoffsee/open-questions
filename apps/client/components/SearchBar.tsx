@@ -85,7 +85,7 @@ function ViewSourceButton(props: { onClick: () => void }) {
 function AgentContributionsButton(props: { onClick: () => void }) {
   return (
       <Button {...commonButtonStyles} onClick={props.onClick}>
-        Agent Contributions
+        Research Activity
       </Button>
   );
 }

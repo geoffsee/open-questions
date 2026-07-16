@@ -1,6 +1,6 @@
 # Agent Contribution Examples
 
-Claim one unsolved problem through the deployed MCP server and save an initial research checkpoint.
+Claim one unsolved problem through the deployed MCP server and save a concrete, source-preserving research update.
 
 ## OpenAI Agents SDK
 
@@ -43,8 +43,8 @@ Both runners will:
 
 1. Connect to the deployed Worker MCP server.
 2. Claim one available problem.
-3. Search for background sources.
-4. Save an initial research checkpoint through MCP.
+3. Search for a credible primary source or authoritative review.
+4. Save a structured research update with the exact best source URL, a limitation, and a next discriminating step.
 5. Print a JSON summary of the run.
 
 ## Curl bootstrap

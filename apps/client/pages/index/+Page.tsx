@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useData } from "vike-react/useData";
 import { CATEGORIES, setEnrichments, type Section } from "../../lib/wiki";
 import type { CaseCategoryData } from "../../lib/cases";
@@ -10,7 +10,7 @@ import Header from "../../components/Header";
 import SearchBar from "../../components/SearchBar";
 import NewsFeed from "../../components/NewsFeed";
 import CaseFeed from "../../components/CaseFeed";
-import ContributionsFeed from "../../components/ContributionsFeed";
+import ContributionsFeed, { type ContributionProblem } from "../../components/ContributionsFeed";
 import AgentLaunchCard from "../../components/AgentLaunchCard";
 import { Box } from "@chakra-ui/react";
 import { fetchQueueSnapshot, type LiveProblemState, type QueueSnapshot } from "../../lib/agentResearch";
@@ -40,11 +40,30 @@ export default function Page() {
 
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [showContributions, setShowContributions] = useState(false);
+  const [focusedProblemId, setFocusedProblemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showRandom, setShowRandom] = useState(false);
   const [randomProblem, setRandomProblem] = useState<any | null>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshot | null>(null);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0);
+
+  const contributionProblemsById = useMemo(() => {
+    const lookup: Record<string, ContributionProblem> = {};
+
+    for (const [category, categorySections] of Object.entries(categories)) {
+      for (const section of categorySections) {
+        for (const text of section.problems) {
+          const id = makeProblemId(category, section.heading, text);
+          lookup[id] = { id, category, section: section.heading, text };
+        }
+      }
+    }
+
+    return lookup;
+  }, [categories]);
 
   const sections = activeCategory && categories[activeCategory]
     ? categories[activeCategory]
@@ -53,14 +72,35 @@ export default function Page() {
   const selectCategory = useCallback((key: string) => {
     setActiveCategory(key);
     setShowContributions(false);
+    setFocusedProblemId(null);
     setSearch("");
   }, []);
 
   const goBack = () => {
     setActiveCategory(null);
     setShowContributions(false);
+    setFocusedProblemId(null);
     setSearch("");
   };
+
+  const showResearchActivity = useCallback(() => {
+    setShowContributions(true);
+    setActiveCategory(null);
+    setFocusedProblemId(null);
+    setSearch("");
+  }, []);
+
+  const viewContributionProblem = useCallback((problem: ContributionProblem) => {
+    setActiveCategory(problem.category);
+    setShowContributions(false);
+    setFocusedProblemId(problem.id);
+    setSearch("");
+  }, []);
+
+  const updateSearch = useCallback((value: string) => {
+    setFocusedProblemId(null);
+    setSearch(value);
+  }, []);
 
   const pickRandom = useCallback(() => {
     setShowRandom(true);
@@ -83,12 +123,20 @@ export default function Page() {
   useEffect(() => {
     const controller = new AbortController();
 
+    setQueueLoading(true);
+    setQueueError(null);
     fetchQueueSnapshot(controller.signal)
       .then(setQueueSnapshot)
-      .catch(() => {});
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setQueueError("The live contribution service did not respond. The catalog itself is still available.");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setQueueLoading(false);
+      });
 
     return () => controller.abort();
-  }, []);
+  }, [queueRefreshKey]);
 
   const filteredSections = sections
     .map((sec) => ({
@@ -142,12 +190,12 @@ export default function Page() {
 
       <SearchBar
         search={search}
-        onSearch={setSearch}
+        onSearch={updateSearch}
         onRandom={pickRandom}
         onAbout={() => setShowAbout(true)}
-        onContributions={() => setShowContributions(true)}
+        onContributions={showResearchActivity}
         showSearch={!!activeCategory || showContributions}
-        placeholder={activeCategory ? `Search in ${activeCategory}...` : showContributions ? "Search contributions..." : "Filter..."}
+        placeholder={activeCategory ? `Search in ${activeCategory}...` : showContributions ? "Search questions, findings, agents, or sources..." : "Filter..."}
       />
 
       <Box pt={8}>
@@ -155,8 +203,16 @@ export default function Page() {
           <ContributionsFeed
             submissions={queueSnapshot?.submissions || []}
             researchEntries={queueSnapshot?.recentResearchEntries || []}
+            researchCountsByProblemId={queueSnapshot?.researchCountsByProblemId || {}}
+            lastResearchAtByProblemId={queueSnapshot?.lastResearchAtByProblemId || {}}
+            activeClaims={queueSnapshot?.activeClaims || []}
+            problemsById={contributionProblemsById}
             search={search}
+            loading={queueLoading}
+            error={queueError}
+            onRetry={() => setQueueRefreshKey((value) => value + 1)}
             onBack={goBack}
+            onViewProblem={viewContributionProblem}
           />
         ) : !activeCategory ? (
           <>
@@ -192,6 +248,7 @@ export default function Page() {
             search={search}
             onBack={goBack}
             liveProblemStateById={liveProblemStateById}
+            focusedProblemId={focusedProblemId}
           />
         )}
       </Box>
