@@ -31080,16 +31080,28 @@ function hasMatchingProblemCategories(manifest, data) {
         .filter(([, category]) => isRecord(category) && category.type === "problems")
         .map(([category]) => category)
         .sort();
+    const requireData = Object.entries(manifest.categories)
+        .filter(([, category]) => isRecord(category) &&
+        category.type === "problems" &&
+        isRecord(category.source) &&
+        category.source.type === "wikipedia")
+        .map(([category]) => category);
     const actual = Object.keys(data.categories).sort();
     if (expected.length !== actual.length ||
         expected.some((category, index) => category !== actual[index])) {
         return false;
     }
-    return Object.values(data.categories).every((sections) => Array.isArray(sections) &&
-        sections.every((section) => isRecord(section) &&
+    return Object.entries(data.categories).every(([category, sections]) => {
+        if (!Array.isArray(sections))
+            return false;
+        return (sections.every((section) => isRecord(section) &&
             typeof section.heading === "string" &&
             Array.isArray(section.problems) &&
-            section.problems.every((problem) => typeof problem === "string")));
+            section.problems.every((problem) => typeof problem === "string")) &&
+            (requireData.includes(category)
+                ? sections.some((section) => Array.isArray(section.problems) && section.problems.length > 0)
+                : true));
+    });
 }
 function hasCachedProblems(path, manifestPath) {
     if (!(0,external_node_fs_namespaceObject.existsSync)(path))

@@ -55,6 +55,10 @@ interface ProblemSection {
 	problems: string[];
 }
 
+interface ProblemsFile {
+	categories?: Record<string, ProblemSection[]>;
+}
+
 export async function loadManifest(
 	path = MANIFEST_PATH,
 ): Promise<CategoryManifest> {
@@ -63,6 +67,19 @@ export async function loadManifest(
 		throw new Error(`Manifest not found at ${path}.`);
 	}
 	return parseManifestJson(await file.text());
+}
+
+async function loadExistingCategories(): Promise<
+	Record<string, ProblemSection[]>
+> {
+	const file = Bun.file(OUTPUT_PATH);
+	if (!(await file.exists())) return {};
+	try {
+		const data = (await file.json()) as ProblemsFile;
+		return data.categories ?? {};
+	} catch {
+		return {};
+	}
 }
 
 async function wikiRequest(
@@ -197,6 +214,7 @@ export async function main(): Promise<void> {
 	console.log("Fetching unsolved problems from Wikipedia...\n");
 	const manifest = await loadManifest();
 	const data: Record<string, ProblemSection[]> = {};
+	const existingCategories = await loadExistingCategories();
 
 	const categories = categoryEntries(manifest).filter(
 		([, category]) => category.type === "problems",
@@ -223,8 +241,18 @@ export async function main(): Promise<void> {
 			data[key] = await fetchCategory(key, category);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
-			console.error(`  [${key}] FAILED: ${message}`);
-			data[key] = [];
+			const previous = Array.isArray(existingCategories[key])
+				? existingCategories[key]
+				: undefined;
+			if (!previous?.length) {
+				throw new Error(
+					`Category "${key}" failed to refresh and has no previous data to preserve: ${message}`,
+				);
+			}
+			console.warn(
+				`  [${key}] FAILED: ${message}; preserving ${previous.reduce((n, section) => n + section.problems.length, 0)} previous problems`,
+			);
+			data[key] = previous;
 		}
 		if (i < categories.length - 1) await Bun.sleep(1000);
 	}

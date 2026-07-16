@@ -7,7 +7,7 @@ import vikeReactChakra from "vike-react-chakra/config";
 
 const config: Config = {
 	// https://vike.dev/head-tags
-	title: "Open Questions",
+	title: "open-questions",
 	description:
 		"A data-driven catalog of open questions, research, and public cases",
 	prerender: true,

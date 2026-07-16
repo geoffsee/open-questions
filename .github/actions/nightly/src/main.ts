@@ -21,6 +21,15 @@ function hasMatchingProblemCategories(
 		)
 		.map(([category]) => category)
 		.sort();
+	const requireData = Object.entries(manifest.categories)
+		.filter(
+			([, category]) =>
+				isRecord(category) &&
+				category.type === "problems" &&
+				isRecord(category.source) &&
+				category.source.type === "wikipedia",
+		)
+		.map(([category]) => category);
 	const actual = Object.keys(data.categories).sort();
 	if (
 		expected.length !== actual.length ||
@@ -29,17 +38,24 @@ function hasMatchingProblemCategories(
 		return false;
 	}
 
-	return Object.values(data.categories).every(
-		(sections) =>
-			Array.isArray(sections) &&
+	return Object.entries(data.categories).every(([category, sections]) => {
+		if (!Array.isArray(sections)) return false;
+		return (
 			sections.every(
 				(section) =>
 					isRecord(section) &&
 					typeof section.heading === "string" &&
 					Array.isArray(section.problems) &&
 					section.problems.every((problem) => typeof problem === "string"),
-			),
-	);
+			) &&
+			(requireData.includes(category)
+				? sections.some(
+						(section) =>
+							Array.isArray(section.problems) && section.problems.length > 0,
+					)
+				: true)
+		);
+	});
 }
 
 export function hasCachedProblems(
