@@ -6,6 +6,7 @@ import {
 	createApiToken,
 	createOAuthState,
 	createSession,
+	getGithubClientId,
 	isContributionAuthRequired,
 	isSafeReturnTo,
 	parseBearerToken,
@@ -13,6 +14,7 @@ import {
 	resetLocalAuthStateForTests,
 	resolvePrincipal,
 	revokeApiToken,
+	sanitizeSecretValue,
 	sha256Hex,
 	verifyOAuthState,
 } from "./auth";
@@ -83,6 +85,20 @@ afterEach(() => {
 });
 
 describe("auth helpers", () => {
+	test("sanitizeSecretValue strips paste accidents", () => {
+		expect(sanitizeSecretValue("=Ov23liJhRdxYFM11LxMx")).toBe(
+			"Ov23liJhRdxYFM11LxMx",
+		);
+		expect(sanitizeSecretValue('  "secret"  ')).toBe("secret");
+		expect(sanitizeSecretValue("  plain  ")).toBe("plain");
+		expect(sanitizeSecretValue(null)).toBe("");
+	});
+
+	test("getGithubClientId normalizes env values", () => {
+		process.env.GITHUB_CLIENT_ID = "=Ov23liJhRdxYFM11LxMx";
+		expect(getGithubClientId()).toBe("Ov23liJhRdxYFM11LxMx");
+	});
+
 	test("parseBearerToken extracts the credential", () => {
 		expect(
 			parseBearerToken(

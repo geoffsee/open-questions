@@ -165,12 +165,37 @@ export function getPagesOrigin(env?: AuthBindings) {
 	).replace(/\/+$/, "");
 }
 
+/**
+ * Normalize secret/env values. Dashboards and .env copy-paste often produce a
+ * leading "=" (e.g. client_id becomes "=Ov23li..."), which makes GitHub OAuth 404.
+ */
+export function sanitizeSecretValue(value: string | undefined | null): string {
+	if (!value) return "";
+	let next = value.trim();
+	// Strip a single accidental leading "=" from KEY=value paste mistakes.
+	if (next.startsWith("=")) {
+		next = next.slice(1).trim();
+	}
+	// Common wrapping when secrets are pasted with quotes.
+	if (
+		(next.startsWith('"') && next.endsWith('"')) ||
+		(next.startsWith("'") && next.endsWith("'"))
+	) {
+		next = next.slice(1, -1).trim();
+	}
+	return next;
+}
+
 export function getGithubClientId(env?: AuthBindings) {
-	return env?.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID || "";
+	return sanitizeSecretValue(
+		env?.GITHUB_CLIENT_ID || process.env.GITHUB_CLIENT_ID,
+	);
 }
 
 export function getGithubClientSecret(env?: AuthBindings) {
-	return env?.GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET || "";
+	return sanitizeSecretValue(
+		env?.GITHUB_CLIENT_SECRET || process.env.GITHUB_CLIENT_SECRET,
+	);
 }
 
 export function isAuthDisabled(env?: AuthBindings) {
