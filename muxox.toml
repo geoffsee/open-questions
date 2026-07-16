@@ -10,6 +10,12 @@ name = "ui"
 cmd = "if [ ! -f dist/client/index.html ]; then VITE_BASE_PATH=/ bun run build; fi; PORT=3031 bun run start"
 cwd = "apps/client"
 log_capacity = 5000
+
+[[service]]
+name = "app-api"
+cmd = "PORT=3040 PUBLIC_DIR=apps/client/dist/client DATABASE_PATH=/data/open-questions.sqlite bun run --cwd apps/api start:container"
+cwd = "."
+log_capacity = 5000
 interactive = false
 
 [[service]]

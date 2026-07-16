@@ -327,7 +327,6 @@ export async function resolvePrincipal(
 ): Promise<AuthenticatedPrincipal | null> {
 	const token = parseBearerToken(request);
 	if (!token) return null;
-
 	const tokenHash = await sha256Hex(token);
 
 	if (env?.AUTH_STORE) {

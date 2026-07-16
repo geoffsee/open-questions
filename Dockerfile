@@ -29,15 +29,16 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
-RUN VITE_BASE_PATH=/ bun run --cwd apps/client build \
+RUN VITE_BASE_PATH=/ VITE_API_ORIGIN=http://localhost:3040/api bun run --cwd apps/client build \
 	&& mkdir -p /workspace/.github /data
 
 ENV PORT=3030 \
 	REPOSITORY_ROOT=/workspace \
 	DATABASE_URL=sqlite:///data/local-action.sqlite \
+	PAGES_ORIGIN=http://localhost:3031 \
 	DOCKER_SMOKE_HOST=host.docker.internal
 
-EXPOSE 3030 3031 3032
+EXPOSE 3030 3031 3032 3040
 VOLUME ["/workspace/.github", "/data"]
 
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
