@@ -1,8 +1,11 @@
 import { Agent, MCPServerStreamableHttp, run } from "@openai/agents";
 import { z } from "zod";
 
-const MCP_URL = process.env.UNSOLVED_MCP_URL || "https://unsolved-problems-api.seemueller.workers.dev/mcp";
-const AGENT_ID = process.env.UNSOLVED_AGENT_ID || `openai-agents-sdk-${Date.now()}`;
+const MCP_URL =
+	process.env.UNSOLVED_MCP_URL ||
+	"https://unsolved-problems-api.seemueller.workers.dev/mcp";
+const AGENT_ID =
+	process.env.UNSOLVED_AGENT_ID || `openai-agents-sdk-${Date.now()}`;
 const MODEL = process.env.OPENAI_MODEL || "gpt-4.1";
 const LEASE_MINUTES = 60;
 const PICK_MODE = process.env.UNSOLVED_PICK_MODE || "agent";
@@ -13,259 +16,300 @@ const USER_CONSTRAINTS = process.env.UNSOLVED_USER_CONSTRAINTS || "";
 const USER_CONTEXT = process.env.UNSOLVED_USER_CONTEXT || "";
 
 const SelectionSchema = z.object({
-  problemId: z.string(),
-  reason: z.string(),
+	problemId: z.string(),
+	reason: z.string(),
 });
 
 const ResearchCheckpointSchema = z.object({
-  kind: z.enum(["note", "reference", "hypothesis", "failed_attempt", "candidate_approach"]),
-  title: z.string(),
-  content: z.string(),
-  sourceUrl: z.string().url().nullable(),
+	kind: z.enum([
+		"note",
+		"reference",
+		"hypothesis",
+		"failed_attempt",
+		"candidate_approach",
+	]),
+	title: z.string(),
+	content: z.string(),
+	sourceUrl: z.string().url().nullable(),
 });
 
 function getText(content: Array<{ type: string; text?: string }>) {
-  return content
-    .filter((item) => item.type === "text" && typeof item.text === "string")
-    .map((item) => item.text)
-    .join("\n");
+	return content
+		.filter((item) => item.type === "text" && typeof item.text === "string")
+		.map((item) => item.text)
+		.join("\n");
 }
 
 function parseCandidateIds(text: string) {
-  return text
-    .split("\n")
-    .map((line) => line.match(/^\d+\.\s+([^\s]+)\s+\[(available|claimed|submitted)\]/)?.[1])
-    .filter((value): value is string => Boolean(value));
+	return text
+		.split("\n")
+		.map(
+			(line) =>
+				line.match(
+					/^\d+\.\s+([^\s]+)\s+\[(available|claimed|submitted)\]/,
+				)?.[1],
+		)
+		.filter((value): value is string => Boolean(value));
 }
 
 type ProblemClaim = {
-  claimId: string;
-  problemId: string;
-  agentId: string;
-  status: string;
+	claimId: string;
+	problemId: string;
+	agentId: string;
+	status: string;
 };
 
 type ResearchEntry = {
-  entryId: string;
-  agentId: string;
-  kind: string;
-  title: string | null;
-  content: string;
-  createdAt: string;
+	entryId: string;
+	agentId: string;
+	kind: string;
+	title: string | null;
+	content: string;
+	createdAt: string;
 };
 
 type ProblemResource = {
-  id: string;
-  category: string;
-  section: string;
-  text: string;
-  researchEntries?: ResearchEntry[];
+	id: string;
+	category: string;
+	section: string;
+	text: string;
+	researchEntries?: ResearchEntry[];
 };
 
 function buildUserBrief() {
-  const parts = [
-    USER_GOAL ? `Desired outcome: ${USER_GOAL}` : null,
-    USER_BACKGROUND ? `Background or strengths: ${USER_BACKGROUND}` : null,
-    USER_CONSTRAINTS ? `Constraints or preferences: ${USER_CONSTRAINTS}` : null,
-    USER_CONTEXT ? `Extra context: ${USER_CONTEXT}` : null,
-  ].filter((value): value is string => Boolean(value));
+	const parts = [
+		USER_GOAL ? `Desired outcome: ${USER_GOAL}` : null,
+		USER_BACKGROUND ? `Background or strengths: ${USER_BACKGROUND}` : null,
+		USER_CONSTRAINTS ? `Constraints or preferences: ${USER_CONSTRAINTS}` : null,
+		USER_CONTEXT ? `Extra context: ${USER_CONTEXT}` : null,
+	].filter((value): value is string => Boolean(value));
 
-  return parts.join("\n");
+	return parts.join("\n");
 }
 
-async function listAvailableProblemIds(mcpServer: MCPServerStreamableHttp, limit: number) {
-  const listResult = await mcpServer.callTool("list_problems", { limit, status: "available" });
-  const candidatesText = getText(listResult);
-  const candidateIds = parseCandidateIds(candidatesText);
-  return { candidatesText, candidateIds };
+async function listAvailableProblemIds(
+	mcpServer: MCPServerStreamableHttp,
+	limit: number,
+) {
+	const listResult = await mcpServer.callTool("list_problems", {
+		limit,
+		status: "available",
+	});
+	const candidatesText = getText(listResult);
+	const candidateIds = parseCandidateIds(candidatesText);
+	return { candidatesText, candidateIds };
 }
 
 async function chooseProblemId(mcpServer: MCPServerStreamableHttp) {
-  const userBrief = buildUserBrief();
+	const userBrief = buildUserBrief();
 
-  if (PICK_MODE === "specific") {
-    if (!SPECIFIC_PROBLEM_ID) {
-      throw new Error("UNSOLVED_PROBLEM_ID is required when UNSOLVED_PICK_MODE=specific.");
-    }
+	if (PICK_MODE === "specific") {
+		if (!SPECIFIC_PROBLEM_ID) {
+			throw new Error(
+				"UNSOLVED_PROBLEM_ID is required when UNSOLVED_PICK_MODE=specific.",
+			);
+		}
 
-    return {
-      chosenProblemId: SPECIFIC_PROBLEM_ID,
-      reason: "Selected explicitly by the launcher.",
-    };
-  }
+		return {
+			chosenProblemId: SPECIFIC_PROBLEM_ID,
+			reason: "Selected explicitly by the launcher.",
+		};
+	}
 
-  const { candidatesText, candidateIds } = await listAvailableProblemIds(mcpServer, PICK_MODE === "random" ? 25 : 5);
+	const { candidatesText, candidateIds } = await listAvailableProblemIds(
+		mcpServer,
+		PICK_MODE === "random" ? 25 : 5,
+	);
 
-  if (candidateIds.length === 0) {
-    throw new Error("The MCP server did not return any available problem IDs.");
-  }
+	if (candidateIds.length === 0) {
+		throw new Error("The MCP server did not return any available problem IDs.");
+	}
 
-  if (PICK_MODE === "random") {
-    const chosenProblemId = candidateIds[Math.floor(Math.random() * candidateIds.length)];
-    return {
-      chosenProblemId,
-      reason: "Selected randomly from the live available shortlist.",
-    };
-  }
+	if (PICK_MODE === "random") {
+		const chosenProblemId =
+			candidateIds[Math.floor(Math.random() * candidateIds.length)];
+		return {
+			chosenProblemId,
+			reason: "Selected randomly from the live available shortlist.",
+		};
+	}
 
-  const selector = new Agent({
-    name: "Problem Selector",
-    model: MODEL,
-    outputType: SelectionSchema,
-    instructions: [
-      "Choose one unsolved problem to work on from the supplied candidates.",
-      "Use the user's brief to bias your selection when it is relevant.",
-      "Prefer a problem with a concise statement and a clear scientific field.",
-      "Return exactly one candidate problemId and a short reason.",
-    ].join("\n"),
-  });
+	const selector = new Agent({
+		name: "Problem Selector",
+		model: MODEL,
+		outputType: SelectionSchema,
+		instructions: [
+			"Choose one unsolved problem to work on from the supplied candidates.",
+			"Use the user's brief to bias your selection when it is relevant.",
+			"Prefer a problem with a concise statement and a clear scientific field.",
+			"Return exactly one candidate problemId and a short reason.",
+		].join("\n"),
+	});
 
-  const selection = await run(
-    selector,
-    [
-      "Select one of these available problem candidates.",
-      "",
-      candidatesText,
-      "",
-      userBrief ? `User brief:\n${userBrief}\n` : "",
-      `Valid problem IDs: ${candidateIds.join(", ")}`,
-    ].join("\n"),
-  );
+	const selection = await run(
+		selector,
+		[
+			"Select one of these available problem candidates.",
+			"",
+			candidatesText,
+			"",
+			userBrief ? `User brief:\n${userBrief}\n` : "",
+			`Valid problem IDs: ${candidateIds.join(", ")}`,
+		].join("\n"),
+	);
 
-  if (!selection.finalOutput) {
-    throw new Error("The selector agent did not return a problem choice.");
-  }
+	if (!selection.finalOutput) {
+		throw new Error("The selector agent did not return a problem choice.");
+	}
 
-  const chosenProblemId = selection.finalOutput.problemId;
-  if (!candidateIds.includes(chosenProblemId)) {
-    throw new Error(`Agent selected an invalid problemId: ${chosenProblemId}`);
-  }
+	const chosenProblemId = selection.finalOutput.problemId;
+	if (!candidateIds.includes(chosenProblemId)) {
+		throw new Error(`Agent selected an invalid problemId: ${chosenProblemId}`);
+	}
 
-  return {
-    chosenProblemId,
-    reason: selection.finalOutput.reason,
-  };
+	return {
+		chosenProblemId,
+		reason: selection.finalOutput.reason,
+	};
 }
 
 async function main() {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is required.");
-  }
+	if (!process.env.OPENAI_API_KEY) {
+		throw new Error("OPENAI_API_KEY is required.");
+	}
 
-  const mcpServer = new MCPServerStreamableHttp({
-    name: "unsolved-problems",
-    url: MCP_URL,
-    cacheToolsList: true,
-  });
+	const mcpServer = new MCPServerStreamableHttp({
+		name: "unsolved-problems",
+		url: MCP_URL,
+		cacheToolsList: true,
+	});
 
-  await mcpServer.connect();
+	await mcpServer.connect();
 
-  try {
-    const userBrief = buildUserBrief();
-    const { chosenProblemId, reason } = await chooseProblemId(mcpServer);
+	try {
+		const userBrief = buildUserBrief();
+		const { chosenProblemId, reason } = await chooseProblemId(mcpServer);
 
-    await mcpServer.callTool("pick_problem", {
-      agentId: AGENT_ID,
-      problemId: chosenProblemId,
-      leaseMinutes: LEASE_MINUTES,
-    });
+		await mcpServer.callTool("pick_problem", {
+			agentId: AGENT_ID,
+			problemId: chosenProblemId,
+			leaseMinutes: LEASE_MINUTES,
+		});
 
-    const queueResource = await mcpServer.readResource("unsolved://queue");
-    const queueJson = queueResource.contents.find((item) => "text" in item)?.text;
-    if (!queueJson) {
-      throw new Error("Queue resource did not return JSON text.");
-    }
+		const queueResource = await mcpServer.readResource("unsolved://queue");
+		const queueJson = queueResource.contents.find(
+			(item) => "text" in item,
+		)?.text;
+		if (!queueJson) {
+			throw new Error("Queue resource did not return JSON text.");
+		}
 
-    const queue = JSON.parse(String(queueJson)) as {
-      activeClaims: ProblemClaim[];
-    };
+		const queue = JSON.parse(String(queueJson)) as {
+			activeClaims: ProblemClaim[];
+		};
 
-    const claim = queue.activeClaims.find(
-      (entry) => entry.agentId === AGENT_ID && entry.problemId === chosenProblemId && entry.status === "active",
-    );
+		const claim = queue.activeClaims.find(
+			(entry) =>
+				entry.agentId === AGENT_ID &&
+				entry.problemId === chosenProblemId &&
+				entry.status === "active",
+		);
 
-    if (!claim) {
-      throw new Error(`Claim for ${chosenProblemId} was not found in the queue resource.`);
-    }
+		if (!claim) {
+			throw new Error(
+				`Claim for ${chosenProblemId} was not found in the queue resource.`,
+			);
+		}
 
-    const problemResource = await mcpServer.readResource(`unsolved://problem/${chosenProblemId}`);
-    const problemJson = problemResource.contents.find((item) => "text" in item)?.text;
-    if (!problemJson) {
-      throw new Error(`Problem resource for ${chosenProblemId} did not return JSON text.`);
-    }
+		const problemResource = await mcpServer.readResource(
+			`unsolved://problem/${chosenProblemId}`,
+		);
+		const problemJson = problemResource.contents.find(
+			(item) => "text" in item,
+		)?.text;
+		if (!problemJson) {
+			throw new Error(
+				`Problem resource for ${chosenProblemId} did not return JSON text.`,
+			);
+		}
 
-    const problem = JSON.parse(String(problemJson)) as ProblemResource;
-    const priorResearch = (problem.researchEntries ?? [])
-      .slice(-3)
-      .map((entry, index) => `${index + 1}. [${entry.kind}] ${entry.title ?? "Untitled"} by ${entry.agentId}: ${entry.content}`)
-      .join("\n");
+		const problem = JSON.parse(String(problemJson)) as ProblemResource;
+		const priorResearch = (problem.researchEntries ?? [])
+			.slice(-3)
+			.map(
+				(entry, index) =>
+					`${index + 1}. [${entry.kind}] ${entry.title ?? "Untitled"} by ${entry.agentId}: ${entry.content}`,
+			)
+			.join("\n");
 
-    const researcher = new Agent({
-      name: "Research Kickoff",
-      model: MODEL,
-      mcpServers: [mcpServer],
-      outputType: ResearchCheckpointSchema,
-      instructions: [
-        "You are starting work on a newly claimed unsolved problem.",
-        "Follow the user's brief where it helps produce a better first pass.",
-        "Read any prior shared research before proposing the next step.",
-        "Use the search_web MCP tool to find a credible primary source or authoritative review before writing the update.",
-        "Produce a durable research contribution, not a generic plan or status report.",
-        "The content must state: (1) a concrete claim or result, (2) what supports it, (3) the main limitation or uncertainty, and (4) the next discriminating test or calculation.",
-        "Choose the most accurate contribution kind. Use reference only when sourceUrl contains the referenced source.",
-        "Preserve the exact best source URL in sourceUrl. Use null only when the search returned no credible source, and say that explicitly in content.",
-        "Do not overclaim that a hard open problem is solved.",
-        "Keep the title specific and the content concise, skeptical, and understandable without the search transcript.",
-      ].join("\n"),
-    });
+		const researcher = new Agent({
+			name: "Research Kickoff",
+			model: MODEL,
+			mcpServers: [mcpServer],
+			outputType: ResearchCheckpointSchema,
+			instructions: [
+				"You are starting work on a newly claimed unsolved problem.",
+				"Follow the user's brief where it helps produce a better first pass.",
+				"Read any prior shared research before proposing the next step.",
+				"Use the search_web MCP tool to find a credible primary source or authoritative review before writing the update.",
+				"Produce a durable research contribution, not a generic plan or status report.",
+				"The content must state: (1) a concrete claim or result, (2) what supports it, (3) the main limitation or uncertainty, and (4) the next discriminating test or calculation.",
+				"Choose the most accurate contribution kind. Use reference only when sourceUrl contains the referenced source.",
+				"Preserve the exact best source URL in sourceUrl. Use null only when the search returned no credible source, and say that explicitly in content.",
+				"Do not overclaim that a hard open problem is solved.",
+				"Keep the title specific and the content concise, skeptical, and understandable without the search transcript.",
+			].join("\n"),
+		});
 
-    const kickoff = await run(
-      researcher,
-      [
-        `Problem: ${problem.text}`,
-        `Field: ${problem.category} / ${problem.section}`,
-        userBrief ? `User brief:\n${userBrief}` : "User brief: none supplied.",
-        priorResearch ? `Recent shared research:\n${priorResearch}` : "Recent shared research: none yet.",
-        "Write one useful, source-preserving research update for the shared log.",
-      ].join("\n"),
-    );
+		const kickoff = await run(
+			researcher,
+			[
+				`Problem: ${problem.text}`,
+				`Field: ${problem.category} / ${problem.section}`,
+				userBrief ? `User brief:\n${userBrief}` : "User brief: none supplied.",
+				priorResearch
+					? `Recent shared research:\n${priorResearch}`
+					: "Recent shared research: none yet.",
+				"Write one useful, source-preserving research update for the shared log.",
+			].join("\n"),
+		);
 
-    const checkpoint = kickoff.finalOutput;
-    if (checkpoint?.content.trim()) {
-      await mcpServer.callTool("save_progress", {
-        problemId: chosenProblemId,
-        agentId: AGENT_ID,
-        kind: checkpoint.kind,
-        title: checkpoint.title.trim(),
-        content: checkpoint.content.trim(),
-        ...(checkpoint.sourceUrl ? { artifactUrl: checkpoint.sourceUrl } : {}),
-      });
-    }
+		const checkpoint = kickoff.finalOutput;
+		if (checkpoint?.content.trim()) {
+			await mcpServer.callTool("save_progress", {
+				problemId: chosenProblemId,
+				agentId: AGENT_ID,
+				kind: checkpoint.kind,
+				title: checkpoint.title.trim(),
+				content: checkpoint.content.trim(),
+				...(checkpoint.sourceUrl ? { artifactUrl: checkpoint.sourceUrl } : {}),
+			});
+		}
 
-    console.log(
-      JSON.stringify(
-        {
-          mcpUrl: MCP_URL,
-          model: MODEL,
-          agentId: AGENT_ID,
-          claimId: claim.claimId,
-          problemId: problem.id,
-          category: problem.category,
-          section: problem.section,
-          problem: problem.text,
-          reason,
-          pickMode: PICK_MODE,
-          userGoal: USER_GOAL || null,
-          priorResearchCount: problem.researchEntries?.length ?? 0,
-          researchUpdate: checkpoint ?? null,
-        },
-        null,
-        2,
-      ),
-    );
-  } finally {
-    await mcpServer.close();
-  }
+		console.log(
+			JSON.stringify(
+				{
+					mcpUrl: MCP_URL,
+					model: MODEL,
+					agentId: AGENT_ID,
+					claimId: claim.claimId,
+					problemId: problem.id,
+					category: problem.category,
+					section: problem.section,
+					problem: problem.text,
+					reason,
+					pickMode: PICK_MODE,
+					userGoal: USER_GOAL || null,
+					priorResearchCount: problem.researchEntries?.length ?? 0,
+					researchUpdate: checkpoint ?? null,
+				},
+				null,
+				2,
+			),
+		);
+	} finally {
+		await mcpServer.close();
+	}
 }
 
 await main();

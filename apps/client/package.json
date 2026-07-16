@@ -1,36 +1,36 @@
 {
-  "name": "@unsolved-problems/client",
-  "scripts": {
-    "dev": "vike dev",
-    "build": "vike build",
-    "build:full": "bun run fetch-data && bun run fetch-news && bun run fetch-cases && bun run enrich-data && bun run build",
-    "fetch-data": "node scripts/fetch-data.mjs",
-    "fetch-news": "node scripts/fetch-news.mjs",
-    "fetch-cases": "node scripts/fetch-cases.mjs",
-    "enrich-data": "node scripts/enrich-data.mjs",
-    "preview": "vike build && vike preview",
-    "prod": "vike build && node ./dist/server/index.mjs"
-  },
-  "dependencies": {
-    "@universal-middleware/core": "^0.4.17",
-    "@vikejs/h3": "^0.2.0",
-    "h3": "~1.15.11",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "telefunc": "^0.2.19",
-    "vike": "0.4.257",
-    "vike-react": "^0.6.21",
-    "vike-react-chakra": "^1.0.3"
-  },
-  "devDependencies": {
-    "@anthropic-ai/sdk": "^0.82.0",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "linkedom": "^0.18.12",
-    "playwright": "^1.59.1",
-    "typescript": "^6.0.2",
-    "vite": "^8.0.3"
-  },
-  "type": "module"
+	"name": "@unsolved-problems/client",
+	"scripts": {
+		"dev": "vike dev",
+		"build": "vike build",
+		"build:full": "bun run fetch-data && bun run fetch-news && bun run fetch-cases && bun run enrich-data && bun run build",
+		"fetch-data": "node scripts/fetch-data.mjs",
+		"fetch-news": "node scripts/fetch-news.mjs",
+		"fetch-cases": "node scripts/fetch-cases.mjs",
+		"enrich-data": "node scripts/enrich-data.mjs",
+		"preview": "vike build && vike preview",
+		"prod": "vike build && node ./dist/server/index.mjs"
+	},
+	"dependencies": {
+		"@universal-middleware/core": "^0.4.17",
+		"@vikejs/h3": "^0.2.0",
+		"h3": "~1.15.11",
+		"react": "^19.2.4",
+		"react-dom": "^19.2.4",
+		"telefunc": "^0.2.19",
+		"vike": "0.4.257",
+		"vike-react": "^0.6.21",
+		"vike-react-chakra": "^1.0.3"
+	},
+	"devDependencies": {
+		"@anthropic-ai/sdk": "^0.82.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"@vitejs/plugin-react": "^6.0.1",
+		"linkedom": "^0.18.12",
+		"playwright": "^1.59.1",
+		"typescript": "^6.0.2",
+		"vite": "^8.0.3"
+	},
+	"type": "module"
 }
