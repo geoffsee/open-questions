@@ -11,8 +11,25 @@ export interface Logger {
 	error(message: string, attributes?: LogAttributes): void;
 }
 
-const level = process.env.LOG_LEVEL ?? "debug";
-const maxChars = Number(process.env.LOG_MAX_CHARS ?? 4_000);
+const level = process.env.LOG_LEVEL ?? "info";
+const maxChars = Number(process.env.LOG_MAX_CHARS ?? 240);
+const previewChars = Number(process.env.LOG_PREVIEW_CHARS ?? 160);
+
+const TOOL_ARG_KEYS = [
+	"query",
+	"problemId",
+	"agentId",
+	"status",
+	"limit",
+	"kind",
+	"title",
+	"entity_type",
+	"id",
+	"url",
+	"queryAuthor",
+	"sort",
+	"leaseMinutes",
+] as const;
 
 const destination =
 	process.stdout.isTTY || process.env.LOG_PRETTY === "1"
@@ -88,16 +105,212 @@ export function truncate(value: unknown, limit = maxChars): unknown {
 	return value;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+	if (!value || typeof value !== "object" || Array.isArray(value)) {
+		return null;
+	}
+	return value as Record<string, unknown>;
+}
+
+function tryParseJson(value: unknown): unknown {
+	if (typeof value !== "string") {
+		return value;
+	}
+	const trimmed = value.trim();
+	if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+		return value;
+	}
+	try {
+		return JSON.parse(trimmed);
+	} catch {
+		return value;
+	}
+}
+
+function countField(record: Record<string, unknown>, key: string) {
+	const value = record[key];
+	if (Array.isArray(value)) {
+		return value.length;
+	}
+	return undefined;
+}
+
+/** Compact tool args: keep only the fields that show intent. */
+export function summarizeToolArgs(
+	input: unknown,
+): LogAttributes | string | null {
+	if (input == null) {
+		return null;
+	}
+
+	if (typeof input === "string") {
+		return String(truncate(input, previewChars));
+	}
+
+	const record = asRecord(input);
+	if (!record) {
+		return truncate(input, previewChars) as LogAttributes | string;
+	}
+
+	const summary: LogAttributes = {};
+	for (const key of TOOL_ARG_KEYS) {
+		if (record[key] == null || record[key] === "") {
+			continue;
+		}
+		summary[key] = truncate(record[key], previewChars);
+	}
+
+	if (Object.keys(summary).length === 0) {
+		return truncate(record, previewChars) as LogAttributes | string;
+	}
+
+	return summary;
+}
+
+/** Compact tool outcomes: counts / ids / short preview — never the full payload. */
+export function summarizeToolOutcome(response: unknown): LogAttributes {
+	if (response == null) {
+		return { empty: true };
+	}
+
+	const parsed = tryParseJson(response);
+	const summary: LogAttributes = {};
+
+	if (typeof response === "string") {
+		summary.chars = response.length;
+	} else {
+		try {
+			summary.chars = JSON.stringify(response).length;
+		} catch {
+			summary.chars = undefined;
+		}
+	}
+
+	const record = asRecord(parsed);
+	if (record) {
+		for (const key of [
+			"items",
+			"works",
+			"matches",
+			"results",
+			"problems",
+			"claims",
+		] as const) {
+			const count = countField(record, key);
+			if (count !== undefined) {
+				summary[`${key}Count`] = count;
+			}
+		}
+
+		const meta = asRecord(record.meta);
+		if (typeof meta?.count === "number") {
+			summary.resultCount = meta.count;
+		}
+
+		const nestedContent = tryParseJson(record.content);
+		const nested = asRecord(nestedContent);
+		if (nested) {
+			for (const key of ["items", "works", "matches", "results"] as const) {
+				const count = countField(nested, key);
+				if (count !== undefined) {
+					summary[`${key}Count`] ??= count;
+				}
+			}
+			const claim = asRecord(nested.claim);
+			if (typeof claim?.claimId === "string") {
+				summary.claimId = claim.claimId;
+			}
+			if (typeof claim?.problemId === "string") {
+				summary.problemId = claim.problemId;
+			}
+			const problem = asRecord(nested.problem);
+			if (typeof problem?.id === "string") {
+				summary.problemId ??= problem.id;
+			}
+			const nestedMeta = asRecord(nested.meta);
+			if (typeof nestedMeta?.count === "number") {
+				summary.resultCount ??= nestedMeta.count;
+			}
+		}
+
+		if (Array.isArray(record.matches)) {
+			summary.matches = truncate(record.matches, previewChars);
+		}
+		if (typeof record.problemId === "string") {
+			summary.problemId ??= record.problemId;
+		}
+		if (typeof record.claimId === "string") {
+			summary.claimId ??= record.claimId;
+		}
+	} else if (Array.isArray(parsed)) {
+		summary.itemsCount = parsed.length;
+	} else if (typeof parsed === "string") {
+		summary.preview = truncate(parsed, previewChars);
+	}
+
+	return summary;
+}
+
+export type AssistantActivity = {
+	text?: string;
+	tools?: string[];
+	thinking?: boolean;
+};
+
+/** Extract what the model is saying / which tools it is about to call. */
+export function summarizeAssistantActivity(
+	content: unknown,
+): AssistantActivity {
+	if (!Array.isArray(content)) {
+		if (typeof content === "string" && content.trim()) {
+			return { text: String(truncate(content, previewChars)) };
+		}
+		return {};
+	}
+
+	const tools: string[] = [];
+	const textParts: string[] = [];
+	let thinking = false;
+
+	for (const block of content) {
+		if (!block || typeof block !== "object") {
+			continue;
+		}
+		const item = block as Record<string, unknown>;
+		const type = String(item.type ?? "");
+
+		if (type === "text" && typeof item.text === "string" && item.text.trim()) {
+			textParts.push(item.text.trim());
+		} else if (type === "thinking") {
+			thinking = true;
+		} else if (type === "tool_use" && typeof item.name === "string") {
+			tools.push(item.name);
+		}
+	}
+
+	const activity: AssistantActivity = {};
+	if (textParts.length > 0) {
+		activity.text = String(truncate(textParts.join("\n"), previewChars));
+	}
+	if (tools.length > 0) {
+		activity.tools = tools;
+	}
+	if (thinking) {
+		activity.thinking = true;
+	}
+	return activity;
+}
+
 export function summarizeContentBlocks(
 	content: unknown,
 ): Array<Record<string, unknown>> {
 	if (!Array.isArray(content)) {
-		return [{ type: typeof content, value: truncate(content) }];
+		return [{ type: typeof content, value: truncate(content, previewChars) }];
 	}
 
 	return content.map((block) => {
 		if (!block || typeof block !== "object") {
-			return { type: typeof block, value: truncate(block) };
+			return { type: typeof block, value: truncate(block, previewChars) };
 		}
 
 		const item = block as Record<string, unknown>;
@@ -105,25 +318,24 @@ export function summarizeContentBlocks(
 
 		switch (type) {
 			case "text":
-				return { type, text: truncate(item.text) };
+				return { type, text: truncate(item.text, previewChars) };
 			case "thinking":
-				return { type, thinking: truncate(item.thinking) };
+				return { type, thinking: true };
 			case "tool_use":
 				return {
 					type,
-					id: item.id,
 					name: item.name,
-					input: truncate(item.input),
+					input: summarizeToolArgs(item.input),
 				};
 			case "tool_result":
 				return {
 					type,
 					tool_use_id: item.tool_use_id,
 					is_error: item.is_error ?? false,
-					content: truncate(item.content),
+					outcome: summarizeToolOutcome(item.content),
 				};
 			default:
-				return { type, value: truncate(item) };
+				return { type };
 		}
 	});
 }
@@ -137,7 +349,7 @@ export async function withToolLogging<T>(
 	const startedAt = Date.now();
 	logger.info("tool starting", {
 		toolName,
-		input: truncate(input),
+		args: summarizeToolArgs(input),
 	});
 
 	try {
@@ -145,14 +357,14 @@ export async function withToolLogging<T>(
 		logger.info("tool finished", {
 			toolName,
 			durationMs: Date.now() - startedAt,
-			response: truncate(response),
+			outcome: summarizeToolOutcome(response),
 		});
 		return response;
 	} catch (error) {
 		logger.error("tool failed", {
 			toolName,
 			durationMs: Date.now() - startedAt,
-			input: truncate(input),
+			args: summarizeToolArgs(input),
 			err: error,
 		});
 		throw error;

@@ -106,7 +106,6 @@ export async function saveUsageArtifact(
 		problemId: input.problemId,
 		provider: input.provider,
 		totals: input.totals,
-		artifactChars: artifactUrl.length,
 	});
 
 	try {
@@ -114,13 +113,13 @@ export async function saveUsageArtifact(
 			const response = await input.callTool("save_progress", args);
 			logger.info("token usage artifact saved", {
 				problemId: input.problemId,
-				response: truncate(response),
+				outcome: truncate(response, 160),
 			});
 		} else {
 			const responseText = await mcpCall(input.mcpUrl, "save_progress", args);
 			logger.info("token usage artifact saved", {
 				problemId: input.problemId,
-				response: truncate(responseText),
+				chars: responseText.length,
 			});
 		}
 		return payload;

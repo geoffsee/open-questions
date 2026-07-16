@@ -3,7 +3,9 @@ import { buildMcpServers } from "./cursorMcp";
 import {
 	createLogger,
 	type Logger,
-	summarizeContentBlocks,
+	summarizeAssistantActivity,
+	summarizeToolArgs,
+	summarizeToolOutcome,
 	truncate,
 } from "./logger";
 import { buildCatalogPrompt, buildUserBrief } from "./prompt";
@@ -50,72 +52,65 @@ function logSdkMessage(logger: Logger, message: SDKMessage) {
 	switch (message.type) {
 		case "system": {
 			logger.info("session initialized", {
-				agentId: message.agent_id,
-				runId: message.run_id,
 				model: message.model,
-				tools: message.tools,
+				runId: message.run_id,
 			});
 			return;
 		}
 
 		case "assistant": {
-			logger.info("assistant turn", {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				content: summarizeContentBlocks(message.message.content),
+			const activity = summarizeAssistantActivity(message.message.content);
+			if (!activity.text) {
+				logger.debug("assistant turn", { tools: activity.tools });
+				return;
+			}
+
+			logger.info("model", {
+				text: activity.text,
+				tools: activity.tools,
 			});
 			return;
 		}
 
 		case "user": {
-			logger.info("user message", {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				content: summarizeContentBlocks(message.message.content),
-			});
+			logger.debug("user message");
 			return;
 		}
 
 		case "tool_call": {
-			const level =
-				message.status === "error"
-					? "error"
-					: message.status === "running"
-						? "info"
-						: "info";
-			const label =
-				message.status === "running"
-					? "tool starting"
-					: message.status === "completed"
-						? "tool finished"
-						: "tool failed";
+			if (message.status === "running") {
+				logger.info("tool starting", {
+					toolName: message.name,
+					args: summarizeToolArgs(message.args),
+				});
+				return;
+			}
 
-			logger[level](label, {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				callId: message.call_id,
+			if (message.status === "completed") {
+				logger.info("tool finished", {
+					toolName: message.name,
+					outcome: summarizeToolOutcome(message.result),
+				});
+				return;
+			}
+
+			logger.error("tool failed", {
 				toolName: message.name,
-				status: message.status,
-				args: truncate(message.args),
-				result: truncate(message.result),
+				args: summarizeToolArgs(message.args),
+				outcome: summarizeToolOutcome(message.result),
 			});
 			return;
 		}
 
 		case "thinking": {
 			logger.debug("thinking", {
-				agentId: message.agent_id,
-				runId: message.run_id,
 				durationMs: message.thinking_duration_ms,
-				text: truncate(message.text),
 			});
 			return;
 		}
 
 		case "status": {
 			logger.info("run status", {
-				agentId: message.agent_id,
-				runId: message.run_id,
 				status: message.status,
 				message: message.message,
 			});
@@ -123,37 +118,22 @@ function logSdkMessage(logger: Logger, message: SDKMessage) {
 		}
 
 		case "task": {
-			logger.debug("task update", {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				status: message.status,
-				text: truncate(message.text),
-			});
+			logger.debug("task update", { status: message.status });
 			return;
 		}
 
 		case "usage": {
-			logger.info("token usage", {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				usage: message.usage,
-			});
+			logger.debug("token usage", { usage: message.usage });
 			return;
 		}
 
 		case "request": {
-			logger.debug("request", {
-				agentId: message.agent_id,
-				runId: message.run_id,
-				requestId: message.request_id,
-			});
+			logger.debug("request", { requestId: message.request_id });
 			return;
 		}
 
 		default: {
-			logger.debug("sdk message", {
-				payload: truncate(message),
-			});
+			logger.debug("sdk message");
 		}
 	}
 }
@@ -176,11 +156,9 @@ async function main() {
 		pickMode: PICK_MODE,
 		problemId: SPECIFIC_PROBLEM_ID,
 		userGoal: USER_GOAL || null,
-		cwd: CWD,
 		mcpServerNames: Object.keys(mcpServers),
-		promptChars: prompt.length,
 	});
-	log.debug("agent prompt", { prompt: truncate(prompt) });
+	log.debug("agent prompt", { promptChars: prompt.length });
 
 	await using agent = await Agent.create({
 		apiKey: API_KEY,
@@ -269,21 +247,21 @@ async function main() {
 	}
 
 	const summary = {
-		mcpUrl: MCP_URL,
 		model: MODEL,
 		agentId: AGENT_ID,
 		cursorAgentId: agent.agentId,
 		runId: result.id,
 		pickMode: PICK_MODE,
 		problemId: claimedProblemId,
-		userGoal: USER_GOAL || null,
 		status: result.status,
 		durationMs: result.durationMs ?? null,
-		usage: result.usage ?? null,
 		result: result.result ?? null,
 	};
 
-	log.info("run complete", summary);
+	log.info("run complete", {
+		...summary,
+		result: truncate(result.result ?? null, 320),
+	});
 	console.log(JSON.stringify(summary, null, 2));
 }
 

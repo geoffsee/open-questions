@@ -7,7 +7,9 @@ import {
 import {
 	createLogger,
 	type Logger,
-	summarizeContentBlocks,
+	summarizeAssistantActivity,
+	summarizeToolArgs,
+	summarizeToolOutcome,
 	truncate,
 } from "./logger";
 import { buildCatalogPrompt, buildUserBrief } from "./prompt";
@@ -74,12 +76,6 @@ function logSdkMessage(logger: Logger, message: SDKMessage) {
 				logger.info("session initialized", {
 					sessionId: message.session_id,
 					model: message.model,
-					cwd: message.cwd,
-					permissionMode: message.permissionMode,
-					tools: message.tools,
-					mcpServers: message.mcp_servers,
-					claudeCodeVersion: message.claude_code_version,
-					apiKeySource: message.apiKeySource,
 				});
 				return;
 			}
@@ -90,62 +86,49 @@ function logSdkMessage(logger: Logger, message: SDKMessage) {
 					maxRetries: message.max_retries,
 					retryDelayMs: message.retry_delay_ms,
 					errorStatus: message.error_status,
-					error: message.error,
 				});
 				return;
 			}
 
-			logger.debug("system event", {
-				subtype: message.subtype,
-				payload: truncate(message),
-			});
+			logger.debug("system event", { subtype: message.subtype });
 			return;
 		}
 
 		case "assistant": {
-			logger.info("assistant turn", {
-				sessionId: message.session_id,
-				parentToolUseId: message.parent_tool_use_id,
-				error: message.error,
-				stopReason: message.message.stop_reason,
-				usage: message.message.usage,
-				content: summarizeContentBlocks(message.message.content),
+			const activity = summarizeAssistantActivity(message.message.content);
+			// Tool calls are logged by PreToolUse hooks; only surface model text here.
+			if (!activity.text) {
+				logger.debug("assistant turn", {
+					tools: activity.tools,
+					thinking: activity.thinking,
+					stopReason: message.message.stop_reason,
+				});
+				return;
+			}
+
+			logger.info("model", {
+				text: activity.text,
+				tools: activity.tools,
 			});
 			return;
 		}
 
 		case "user": {
-			const content =
-				message.message &&
-				typeof message.message === "object" &&
-				"content" in message.message
-					? message.message.content
-					: message.message;
-
-			logger.info("user / tool result", {
-				sessionId: message.session_id,
-				parentToolUseId: message.parent_tool_use_id,
-				isSynthetic: message.isSynthetic,
-				toolUseResult: truncate(message.tool_use_result),
-				content: summarizeContentBlocks(content),
-			});
+			logger.debug("tool result delivered");
 			return;
 		}
 
 		case "tool_progress": {
 			logger.debug("tool progress", {
-				toolUseId: message.tool_use_id,
 				toolName: message.tool_name,
 				elapsedSeconds: message.elapsed_time_seconds,
-				parentToolUseId: message.parent_tool_use_id,
 			});
 			return;
 		}
 
 		case "tool_use_summary": {
-			logger.info("tool use summary", {
-				summary: truncate(message.summary),
-				toolUseIds: message.preceding_tool_use_ids,
+			logger.debug("tool use summary", {
+				summary: truncate(message.summary, 160),
 			});
 			return;
 		}
@@ -153,35 +136,24 @@ function logSdkMessage(logger: Logger, message: SDKMessage) {
 		case "result": {
 			if (message.subtype === "success") {
 				logger.info("agent finished successfully", {
-					sessionId: message.session_id,
 					numTurns: message.num_turns,
 					durationMs: message.duration_ms,
-					durationApiMs: message.duration_api_ms,
 					totalCostUsd: message.total_cost_usd,
-					usage: message.usage,
-					stopReason: message.stop_reason,
-					permissionDenials: message.permission_denials,
-					result: truncate(message.result),
+					result: truncate(message.result, 320),
 				});
 			} else {
 				logger.error("agent finished with error", {
-					sessionId: message.session_id,
 					subtype: message.subtype,
 					numTurns: message.num_turns,
 					durationMs: message.duration_ms,
-					totalCostUsd: message.total_cost_usd,
 					errors: message.errors,
-					permissionDenials: message.permission_denials,
 				});
 			}
 			return;
 		}
 
 		default: {
-			logger.debug("sdk message", {
-				type: message.type,
-				payload: truncate(message),
-			});
+			logger.debug("sdk message", { type: message.type });
 		}
 	}
 }
@@ -193,9 +165,8 @@ function buildLoggingHooks(logger: Logger) {
 		}
 
 		logger.info("tool starting", {
-			toolUseId: input.tool_use_id,
 			toolName: input.tool_name,
-			input: truncate(input.tool_input),
+			args: summarizeToolArgs(input.tool_input),
 		});
 		return { continue: true };
 	};
@@ -206,11 +177,9 @@ function buildLoggingHooks(logger: Logger) {
 		}
 
 		logger.info("tool finished", {
-			toolUseId: input.tool_use_id,
 			toolName: input.tool_name,
 			durationMs: input.duration_ms,
-			input: truncate(input.tool_input),
-			response: truncate(input.tool_response),
+			outcome: summarizeToolOutcome(input.tool_response),
 		});
 		return { continue: true };
 	};
@@ -221,11 +190,9 @@ function buildLoggingHooks(logger: Logger) {
 		}
 
 		logger.error("tool failed", {
-			toolUseId: input.tool_use_id,
 			toolName: input.tool_name,
 			durationMs: input.duration_ms,
-			isInterrupt: input.is_interrupt,
-			input: truncate(input.tool_input),
+			args: summarizeToolArgs(input.tool_input),
 			error: input.error,
 		});
 		return { continue: true };
@@ -252,11 +219,8 @@ async function main() {
 		pickMode: PICK_MODE,
 		problemId: SPECIFIC_PROBLEM_ID,
 		userGoal: USER_GOAL || null,
-		hasProjectMcpConfig: HAS_PROJECT_MCP_CONFIG,
-		allowedTools: ALLOWED_MCP_TOOLS,
-		promptChars: prompt.length,
 	});
-	log.debug("agent prompt", { prompt: truncate(prompt) });
+	log.debug("agent prompt", { promptChars: prompt.length });
 
 	let finalResult: string | null = null;
 	let sessionId: string | null = null;
@@ -369,20 +333,20 @@ async function main() {
 	}
 
 	const summary = {
-		mcpUrl: MCP_URL,
 		model: MODEL,
 		agentId: AGENT_ID,
 		pickMode: PICK_MODE,
 		problemId: claimedProblemId,
-		userGoal: USER_GOAL || null,
 		sessionId,
-		usage,
 		totalCostUsd,
 		numTurns,
 		result: finalResult,
 	};
 
-	log.info("run complete", summary);
+	log.info("run complete", {
+		...summary,
+		result: truncate(finalResult, 320),
+	});
 	console.log(JSON.stringify(summary, null, 2));
 }
 
