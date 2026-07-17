@@ -39,6 +39,7 @@ describe("published manifest", () => {
 		);
 		expect(manifest.categories.mathematics?.type).toBe("problems");
 		expect(manifest.categories["frontier research"]?.type).toBe("news");
+		expect(manifest.categories["frontier research"]?.label).toBe("Latest News");
 		expect(manifest.categories["missing persons"]?.type).toBe("cases");
 		expect(manifest.categories.physics?.presentation?.emoji).toBeTruthy();
 	});

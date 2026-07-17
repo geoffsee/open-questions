@@ -119,7 +119,7 @@
       }
     },
     "frontier research": {
-      "label": "Frontier Research",
+      "label": "Latest News",
       "type": "news",
       "presentation": {
         "emoji": "🔬",
