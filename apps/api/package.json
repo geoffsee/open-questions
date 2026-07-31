@@ -13,10 +13,10 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.29.0",
-		"hono": "^4.12.14",
-		"wrangler": "^4.83.0",
-		"zod": "^4.3.6"
+		"@modelcontextprotocol/sdk": "^1.30.0",
+		"hono": "^4.12.32",
+		"wrangler": "^4.114.0",
+		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@cloudflare/workers-types": "^4.20260405.1",
