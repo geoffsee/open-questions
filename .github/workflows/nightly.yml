@@ -24,12 +24,12 @@ jobs:
       run:
         working-directory: apps/client
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
 
       - name: Restore data cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             apps/client/public/data/problems.json
@@ -51,7 +51,7 @@ jobs:
           VITE_LOCAL_AUTH_ENABLED: "false"
 
       - name: Save data cache
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             apps/client/public/data/problems.json
@@ -62,7 +62,7 @@ jobs:
           key: data-${{ github.run_id }}
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: apps/client/dist/client
 
@@ -75,4 +75,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
