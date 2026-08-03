@@ -33,13 +33,13 @@
 	"devDependencies": {
 		"@anthropic-ai/sdk": "^0.115.0",
 		"@types/bun": "^1.3.14",
-		"@types/react": "^19.2.17",
-		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^6.0.4",
+		"@types/react": "^19.2.18",
+		"@types/react-dom": "^19.2.4",
+		"@vitejs/plugin-react": "^6.0.5",
 		"linkedom": "^0.18.13",
-		"playwright": "^1.62.0",
-		"typescript": "^6.0.2",
-		"vite": "^8.1.5"
+		"playwright": "^1.62.1",
+		"typescript": "^6.0.3",
+		"vite": "^8.2.0"
 	},
 	"type": "module"
 }
