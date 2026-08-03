@@ -29,5 +29,8 @@
 		"@biomejs/biome": "2.5.5",
 		"@types/node": "^24.0.0",
 		"@vercel/ncc": "^0.44.1"
+	},
+	"overrides": {
+		"zod": "4.4.3"
 	}
 }
