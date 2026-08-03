@@ -102,7 +102,7 @@ async function loadExistingCategories(): Promise<
 
 async function wikiRequest(
 	params: Record<string, string | number | boolean>,
-	retries = 3,
+	retries = 6,
 ): Promise<WikiParseResponse> {
 	const url = new URL(WIKI_API);
 	url.searchParams.set("format", "json");
@@ -116,7 +116,11 @@ async function wikiRequest(
 		});
 		if (res.ok) return (await res.json()) as WikiParseResponse;
 		if (res.status === 429 && attempt < retries) {
-			const wait = (attempt + 1) * 5000;
+			const retryAfter = Number(res.headers.get("retry-after"));
+			const wait =
+				Number.isFinite(retryAfter) && retryAfter > 0
+					? retryAfter * 1000
+					: Math.min(60_000, 5_000 * 2 ** attempt);
 			console.log(`    Rate limited, waiting ${wait / 1000}s...`);
 			await Bun.sleep(wait);
 			continue;

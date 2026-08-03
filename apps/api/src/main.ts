@@ -388,7 +388,12 @@ async function zstdCompress(value: string): Promise<Uint8Array> {
 async function zstdDecompress(value: Uint8Array): Promise<string> {
 	const stream = new DecompressionStream("zstd");
 	const writer = stream.writable.getWriter();
-	await writer.write(value);
+	// TS 7 / DOM lib require Uint8Array<ArrayBuffer>; copy if backing store is SharedArrayBuffer.
+	const chunk =
+		value.buffer instanceof ArrayBuffer
+			? (value as Uint8Array<ArrayBuffer>)
+			: new Uint8Array(value);
+	await writer.write(chunk);
 	await writer.close();
 	return new Response(stream.readable).text();
 }

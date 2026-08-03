@@ -334,7 +334,7 @@ function bytesToHex(bytes: Uint8Array): string {
 	return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function hexToBytes(hex: string): Uint8Array {
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
 	const clean = hex.trim();
 	if (clean.length % 2 !== 0) {
 		throw new Error("Invalid hex string.");

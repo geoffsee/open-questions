@@ -8,6 +8,10 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 10
+    ignore:
+      # @vercel/ncc 0.44.1 breaks under TypeScript 7 (pre-commit actions:build).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     assignees:
       - "geoffsee"
     labels:
