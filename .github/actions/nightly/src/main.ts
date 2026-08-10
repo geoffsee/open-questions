@@ -149,7 +149,10 @@ export async function publishCachedProblems(
 export async function ensurePagesAllowsMain(
 	fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
-	const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+	const token =
+		core.getInput("github-token") ||
+		process.env.GITHUB_TOKEN ||
+		process.env.GH_TOKEN;
 	const repo = process.env.GITHUB_REPOSITORY;
 	if (!token || !repo) {
 		core.info("Skipping pages branch policy check (token/repo missing)");

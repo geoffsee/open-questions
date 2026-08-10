@@ -31291,7 +31291,9 @@ async function publishCachedProblems(client, manifestPath, problemsPath, execute
  * Best-effort: missing token/permissions must not fail the data build.
  */
 async function ensurePagesAllowsMain(fetchImpl = fetch) {
-    const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+    const token = getInput("github-token") ||
+        process.env.GITHUB_TOKEN ||
+        process.env.GH_TOKEN;
     const repo = process.env.GITHUB_REPOSITORY;
     if (!token || !repo) {
         info("Skipping pages branch policy check (token/repo missing)");

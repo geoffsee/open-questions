@@ -1,5 +1,10 @@
 name: Nightly data build
 description: Refreshes the data feeds and builds the static client.
+inputs:
+  github-token:
+    description: Token used to self-heal github-pages branch policies
+    required: false
+    default: ${{ github.token }}
 runs:
   using: node24
   main: dist/index.js
