@@ -20,7 +20,7 @@ describe("ensurePagesAllowsMain", () => {
 				{ status: 200 },
 			);
 		};
-		process.env.GITHUB_TOKEN = "test-token";
+		process.env["INPUT_GITHUB-TOKEN"] = "test-token";
 		process.env.GITHUB_REPOSITORY = "geoffsee/open-questions";
 		await ensurePagesAllowsMain(fetchImpl);
 		expect(calls.some((c) => c.method === "POST")).toBe(true);
@@ -35,7 +35,7 @@ describe("ensurePagesAllowsMain", () => {
 				{ status: 200 },
 			);
 		};
-		process.env.GITHUB_TOKEN = "test-token";
+		process.env["INPUT_GITHUB-TOKEN"] = "test-token";
 		process.env.GITHUB_REPOSITORY = "geoffsee/open-questions";
 		await ensurePagesAllowsMain(fetchImpl);
 		expect(methods).toEqual(["GET"]);
