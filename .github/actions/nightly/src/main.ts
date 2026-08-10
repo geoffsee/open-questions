@@ -141,6 +141,67 @@ export async function publishCachedProblems(
 		throw new Error("Publishing cached problems.json failed.");
 }
 
+/**
+ * github-pages env historically allowed only `master` after the default
+ * branch rename. Ensure `main` is allowed so the deploy job can succeed.
+ * Best-effort: missing token/permissions must not fail the data build.
+ */
+export async function ensurePagesAllowsMain(
+	fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+	const token =
+		core.getInput("github-token") ||
+		process.env.GITHUB_TOKEN ||
+		process.env.GH_TOKEN;
+	const repo = process.env.GITHUB_REPOSITORY;
+	if (!token || !repo) {
+		core.info("Skipping pages branch policy check (token/repo missing)");
+		return;
+	}
+
+	const headers = {
+		Accept: "application/vnd.github+json",
+		Authorization: `Bearer ${token}`,
+		"X-GitHub-Api-Version": "2022-11-28",
+	};
+	const base = `https://api.github.com/repos/${repo}/environments/github-pages/deployment-branch-policies`;
+
+	try {
+		const listRes = await fetchImpl(base, { headers });
+		if (!listRes.ok) {
+			core.warning(
+				`Could not list github-pages branch policies (${listRes.status})`,
+			);
+			return;
+		}
+		const body = (await listRes.json()) as {
+			branch_policies?: Array<{ name?: string }>;
+		};
+		const names = (body.branch_policies ?? [])
+			.map((p) => p.name)
+			.filter((n): n is string => typeof n === "string");
+		if (names.includes("main")) {
+			core.info("github-pages already allows main");
+			return;
+		}
+
+		const createRes = await fetchImpl(base, {
+			method: "POST",
+			headers: { ...headers, "Content-Type": "application/json" },
+			body: JSON.stringify({ name: "main", type: "branch" }),
+		});
+		if (createRes.ok) {
+			core.info("Added main to github-pages deployment branch policies");
+			return;
+		}
+		core.warning(
+			`Failed to add main to github-pages branch policies (${createRes.status})`,
+		);
+	} catch (error) {
+		core.warning(`Pages branch policy self-heal failed: ${String(error)}`);
+	}
+}
+
 export async function run(): Promise<void> {
 	try {
 		const root = process.env.GITHUB_WORKSPACE ?? process.cwd();
@@ -154,6 +215,7 @@ export async function run(): Promise<void> {
 				? configuredManifest
 				: resolve(client, configuredManifest)
 			: resolve(client, "public/data/manifest.json");
+		await ensurePagesAllowsMain();
 		await command(client, ["install"]);
 		await command(client, ["run", "build:cli"]);
 		await command(client, ["x", "playwright", "install", "chromium"]);
