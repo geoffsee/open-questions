@@ -225,6 +225,28 @@ describe("HTTP surface", () => {
 		expect(body.activeClaims).toEqual([]);
 		expect(body.submissions).toEqual([]);
 	});
+
+	test("research activity exposes cursor pagination", async () => {
+		const response = await app.fetch(
+			new Request("http://localhost/research-activity?limit=10"),
+		);
+		const body = (await response.json()) as {
+			items: unknown[];
+			nextCursor: string | null;
+			total: number;
+		};
+		expect(response.status).toBe(200);
+		expect(body.items).toEqual([]);
+		expect(body.nextCursor).toBeNull();
+		expect(body.total).toBe(0);
+	});
+
+	test("research activity rejects invalid pagination", async () => {
+		const response = await app.fetch(
+			new Request("http://localhost/research-activity?cursor=bad"),
+		);
+		expect(response.status).toBe(400);
+	});
 });
 
 describe("list_problems MCP tool", () => {

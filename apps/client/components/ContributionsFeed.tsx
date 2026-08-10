@@ -8,10 +8,15 @@ import {
 	Spinner,
 	Text,
 } from "@chakra-ui/react";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	fetchProblemResearch,
+	fetchResearchActivityPage,
 	type LiveClaim,
+	type ResearchActivityFilter,
+	type ResearchActivityItem,
+	type ResearchActivityPage,
+	type ResearchActivitySort,
 	type ResearchEntry,
 	type SubmittedSolution,
 } from "../lib/agentResearch";
@@ -25,23 +30,17 @@ export interface ContributionProblem {
 }
 
 interface ContributionsFeedProps {
-	submissions: SubmittedSolution[];
-	researchEntries: ResearchEntry[];
-	researchCountsByProblemId: Record<string, number>;
-	lastResearchAtByProblemId: Record<string, string>;
-	activeClaims: LiveClaim[];
 	problemsById: Record<string, ContributionProblem>;
 	categoryLabels?: Record<string, string>;
 	search: string;
-	loading: boolean;
-	error: string | null;
-	onRetry: () => void;
 	onBack: () => void;
 	onViewProblem: (problem: ContributionProblem) => void;
 }
 
-type FeedFilter = "all" | "solutions" | "supported" | "active";
-type SortMode = "recent" | "developed";
+type FeedFilter = ResearchActivityFilter;
+type SortMode = ResearchActivitySort;
+
+const ACTIVITY_PAGE_SIZE = 10;
 
 type ContributionItem =
 	| { type: "submission"; item: SubmittedSolution; sortDate: string }
@@ -100,17 +99,6 @@ function hasSupportingMaterial(entry: ContributionItem) {
 	return entry.item.kind === "reference" || hasUrl(entry.item.content);
 }
 
-function latestDate(values: Array<string | null | undefined>) {
-	const validValues = values
-		.filter((value): value is string => Boolean(value))
-		.filter((value) => !Number.isNaN(new Date(value).getTime()));
-
-	if (validValues.length === 0) return "1970-01-01T00:00:00.000Z";
-	return validValues.sort(
-		(a, b) => new Date(b).getTime() - new Date(a).getTime(),
-	)[0];
-}
-
 function isUsageEntry(entry: ContributionItem) {
 	return (
 		entry.type === "research" &&
@@ -122,65 +110,20 @@ function isUsageResearchEntry(entry: { title?: string | null }) {
 	return entry.title?.toLowerCase().includes("token usage") ?? false;
 }
 
-function buildGroups(
-	submissions: SubmittedSolution[],
-	researchEntries: ResearchEntry[],
-	researchCountsByProblemId: Record<string, number>,
-	lastResearchAtByProblemId: Record<string, string>,
-	activeClaims: LiveClaim[],
+function toContributionGroup(
+	item: ResearchActivityItem,
 	problemsById: Record<string, ContributionProblem>,
-) {
-	const groups = new Map<string, ContributionGroup>();
-
-	const getGroup = (problemId: string) => {
-		const existing = groups.get(problemId);
-		if (existing) return existing;
-
-		const group: ContributionGroup = {
-			problemId,
-			problem: problemsById[problemId] ?? null,
-			submissions: [],
-			researchEntries: [],
-			researchCount: researchCountsByProblemId[problemId] ?? 0,
-			lastResearchAt: lastResearchAtByProblemId[problemId] ?? null,
-			activeClaim: null,
-			latestAt: "1970-01-01T00:00:00.000Z",
-		};
-		groups.set(problemId, group);
-		return group;
+): ContributionGroup {
+	return {
+		problemId: item.problemId,
+		problem: problemsById[item.problemId] ?? null,
+		submissions: item.submissions,
+		researchEntries: item.recentResearchEntries,
+		researchCount: item.researchCount,
+		lastResearchAt: item.lastResearchAt,
+		activeClaim: item.activeClaim,
+		latestAt: item.latestAt,
 	};
-
-	for (const problemId of Object.keys(researchCountsByProblemId)) {
-		getGroup(problemId);
-	}
-
-	for (const submission of submissions) {
-		getGroup(submission.problemId).submissions.push(submission);
-	}
-
-	for (const entry of researchEntries) {
-		if (isUsageResearchEntry(entry)) continue;
-		getGroup(entry.problemId).researchEntries.push(entry);
-	}
-
-	for (const claim of activeClaims) {
-		getGroup(claim.problemId).activeClaim = claim;
-	}
-
-	for (const group of groups.values()) {
-		group.researchCount = Math.max(
-			group.researchCount,
-			group.researchEntries.length,
-		);
-		group.latestAt = latestDate([
-			group.lastResearchAt,
-			group.activeClaim?.pickedUpAt,
-			...group.submissions.map((submission) => submission.submittedAt),
-			...group.researchEntries.map((entry) => entry.createdAt),
-		]);
-	}
-
-	return Array.from(groups.values());
 }
 
 function truncateAtWord(value: string, limit: number) {
@@ -826,137 +769,139 @@ function Metric({ value, label }: { value: number; label: string }) {
 }
 
 export default function ContributionsFeed({
-	submissions,
-	researchEntries,
-	researchCountsByProblemId,
-	lastResearchAtByProblemId,
-	activeClaims,
 	problemsById,
 	categoryLabels,
 	search,
-	loading,
-	error,
-	onRetry,
 	onBack,
 	onViewProblem,
 }: ContributionsFeedProps) {
 	const [filter, setFilter] = useState<FeedFilter>("all");
 	const [sortMode, setSortMode] = useState<SortMode>("recent");
-
-	const groups = useMemo(
-		() =>
-			buildGroups(
-				submissions,
-				researchEntries,
-				researchCountsByProblemId,
-				lastResearchAtByProblemId,
-				activeClaims,
-				problemsById,
-			),
-		[
-			submissions,
-			researchEntries,
-			researchCountsByProblemId,
-			lastResearchAtByProblemId,
-			activeClaims,
-			problemsById,
-		],
-	);
-
-	const groupItems = (group: ContributionGroup): ContributionItem[] => [
-		...group.submissions.map(
-			(item) =>
-				({
-					type: "submission",
-					item,
-					sortDate: item.submittedAt,
-				}) as ContributionItem,
-		),
-		...group.researchEntries.map(
-			(item) =>
-				({
-					type: "research",
-					item,
-					sortDate: item.createdAt,
-				}) as ContributionItem,
-		),
-	];
-
-	const filterCounts: Record<FeedFilter, number> = {
-		all: groups.length,
-		solutions: groups.filter((group) => group.submissions.length > 0).length,
-		supported: groups.filter((group) =>
-			groupItems(group).some(hasSupportingMaterial),
-		).length,
-		active: groups.filter((group) => group.activeClaim).length,
-	};
-
+	const [groups, setGroups] = useState<ContributionGroup[]>([]);
+	const [page, setPage] = useState<ResearchActivityPage | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [loadingMore, setLoadingMore] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+	const [refreshKey, setRefreshKey] = useState(0);
+	const requestVersionRef = useRef(0);
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const loadMoreRef = useRef<HTMLDivElement>(null);
 	const query = search.toLowerCase().trim();
-	const filtered = groups
-		.filter((group) => {
-			if (filter === "solutions" && group.submissions.length === 0)
-				return false;
-			if (
-				filter === "supported" &&
-				!groupItems(group).some(hasSupportingMaterial)
-			)
-				return false;
-			if (filter === "active" && !group.activeClaim) return false;
 
-			if (!query) return true;
-			const haystack = [
-				group.problemId,
-				group.problem?.category,
-				group.problem?.section,
-				group.problem?.text,
-				group.activeClaim?.agentId,
-				...group.submissions.flatMap((item) => [
-					item.title,
-					item.summary,
-					item.approach,
-					item.evidence,
-					item.agentId,
-				]),
-				...group.researchEntries.flatMap((item) => [
-					item.title,
-					item.content,
-					item.kind,
-					item.agentId,
-				]),
-			]
-				.filter(Boolean)
-				.join(" ")
-				.toLowerCase();
-			return haystack.includes(query);
+	useEffect(() => {
+		void refreshKey;
+		const controller = new AbortController();
+		const requestVersion = ++requestVersionRef.current;
+		setLoading(true);
+		setError(null);
+		setLoadMoreError(null);
+		setGroups([]);
+		setPage(null);
+		scrollContainerRef.current?.scrollTo({ top: 0 });
+
+		fetchResearchActivityPage({
+			limit: ACTIVITY_PAGE_SIZE,
+			filter,
+			sort: sortMode,
+			query,
+			signal: controller.signal,
 		})
-		.sort((a, b) => {
-			if (sortMode === "developed") {
-				const activityDifference =
-					b.researchCount +
-					b.submissions.length -
-					(a.researchCount + a.submissions.length);
-				if (activityDifference !== 0) return activityDifference;
-			}
-			return new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime();
-		});
+			.then((result) => {
+				if (requestVersion !== requestVersionRef.current) return;
+				setPage(result);
+				setGroups(
+					result.items.map((item) => toContributionGroup(item, problemsById)),
+				);
+			})
+			.catch((requestError) => {
+				if (
+					controller.signal.aborted ||
+					requestVersion !== requestVersionRef.current
+				)
+					return;
+				setError(
+					requestError instanceof Error
+						? requestError.message
+						: "Research activity could not be loaded.",
+				);
+			})
+			.finally(() => {
+				if (requestVersion === requestVersionRef.current) setLoading(false);
+			});
 
-	const totalUpdates =
-		Object.values(researchCountsByProblemId).reduce(
-			(sum, count) => sum + count,
-			0,
-		) + submissions.length;
-	const supportedUpdates = [
-		...submissions.map((item) => ({
-			type: "submission" as const,
-			item,
-			sortDate: item.submittedAt,
-		})),
-		...researchEntries.map((item) => ({
-			type: "research" as const,
-			item,
-			sortDate: item.createdAt,
-		})),
-	].filter(hasSupportingMaterial).length;
+		return () => controller.abort();
+	}, [filter, sortMode, query, refreshKey, problemsById]);
+
+	useEffect(() => {
+		const root = scrollContainerRef.current;
+		const target = loadMoreRef.current;
+		const cursor = page?.nextCursor;
+		if (!root || !target || !cursor || loadingMore || loadMoreError) return;
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries[0]?.isIntersecting) return;
+				observer.disconnect();
+				const requestVersion = requestVersionRef.current;
+				setLoadingMore(true);
+				fetchResearchActivityPage({
+					limit: ACTIVITY_PAGE_SIZE,
+					cursor,
+					filter,
+					sort: sortMode,
+					query,
+				})
+					.then((result) => {
+						if (requestVersion !== requestVersionRef.current) return;
+						setPage(result);
+						setGroups((current) => {
+							const byId = new Map(
+								current.map((group) => [group.problemId, group]),
+							);
+							for (const item of result.items) {
+								byId.set(
+									item.problemId,
+									toContributionGroup(item, problemsById),
+								);
+							}
+							return Array.from(byId.values());
+						});
+					})
+					.catch((requestError) => {
+						if (requestVersion !== requestVersionRef.current) return;
+						setLoadMoreError(
+							requestError instanceof Error
+								? requestError.message
+								: "More research activity could not be loaded.",
+						);
+					})
+					.finally(() => {
+						if (requestVersion === requestVersionRef.current)
+							setLoadingMore(false);
+					});
+			},
+			{ root, rootMargin: "240px 0px" },
+		);
+		observer.observe(target);
+
+		return () => observer.disconnect();
+	}, [
+		page?.nextCursor,
+		loadingMore,
+		loadMoreError,
+		filter,
+		sortMode,
+		query,
+		problemsById,
+	]);
+
+	const filterCounts = page?.filterCounts ?? {
+		all: 0,
+		solutions: 0,
+		supported: 0,
+		active: 0,
+	};
 	const filters: Array<{ id: FeedFilter; label: string }> = [
 		{ id: "all", label: "All questions" },
 		{ id: "solutions", label: "Candidates" },
@@ -1032,7 +977,7 @@ export default function ContributionsFeed({
 				</Text>
 			</Box>
 
-			{!loading && !error && groups.length > 0 && (
+			{!loading && !error && page && page.stats.questionsExplored > 0 && (
 				<Box
 					mt={5}
 					display="grid"
@@ -1042,10 +987,19 @@ export default function ContributionsFeed({
 					}}
 					gap={2.5}
 				>
-					<Metric value={groups.length} label="questions explored" />
-					<Metric value={totalUpdates} label="public updates" />
-					<Metric value={submissions.length} label="candidate solutions" />
-					<Metric value={supportedUpdates} label="updates with support" />
+					<Metric
+						value={page.stats.questionsExplored}
+						label="questions explored"
+					/>
+					<Metric value={page.stats.totalUpdates} label="public updates" />
+					<Metric
+						value={page.stats.candidateSolutions}
+						label="candidate solutions"
+					/>
+					<Metric
+						value={page.stats.supportedUpdates}
+						label="updates with support"
+					/>
 				</Box>
 			)}
 
@@ -1093,14 +1047,14 @@ export default function ContributionsFeed({
 						px={3}
 						py={1.5}
 						fontSize="0.75rem"
-						onClick={onRetry}
+						onClick={() => setRefreshKey((value) => value + 1)}
 					>
 						Try again
 					</Button>
 				</Box>
 			)}
 
-			{!loading && !error && groups.length > 0 && (
+			{!loading && !error && page && page.stats.questionsExplored > 0 && (
 				<>
 					<Flex
 						mt={6}
@@ -1176,17 +1130,61 @@ export default function ContributionsFeed({
 						</Flex>
 					</Flex>
 
-					{filtered.length > 0 ? (
-						<Flex direction="column" gap={4}>
-							{filtered.map((group) => (
-								<ContributionGroupCard
-									key={group.problemId}
-									group={group}
-									categoryLabels={categoryLabels}
-									onViewProblem={onViewProblem}
-								/>
-							))}
-						</Flex>
+					{groups.length > 0 ? (
+						<Box
+							ref={scrollContainerRef}
+							maxH="70vh"
+							overflowY="auto"
+							pr={{ base: 1, md: 2 }}
+							overscrollBehavior="contain"
+							aria-label="Research activity results"
+						>
+							<Flex direction="column" gap={4}>
+								{groups.map((group) => (
+									<ContributionGroupCard
+										key={group.problemId}
+										group={group}
+										categoryLabels={categoryLabels}
+										onViewProblem={onViewProblem}
+									/>
+								))}
+								{page?.nextCursor && !loadMoreError && (
+									<Flex
+										ref={loadMoreRef}
+										minH="56px"
+										align="center"
+										justify="center"
+										gap={2}
+										color="app.textDim"
+										fontSize="0.74rem"
+									>
+										{loadingMore && <Spinner size="xs" />}
+										{loadingMore
+											? "Loading more activity…"
+											: "Scroll for more activity"}
+									</Flex>
+								)}
+								{loadMoreError && (
+									<Flex
+										minH="64px"
+										align="center"
+										justify="center"
+										gap={3}
+										color="app.error"
+										fontSize="0.74rem"
+									>
+										<Text>{loadMoreError}</Text>
+										<Button
+											variant="outline"
+											size="xs"
+											onClick={() => setLoadMoreError(null)}
+										>
+											Try again
+										</Button>
+									</Flex>
+								)}
+							</Flex>
+						</Box>
 					) : (
 						<Box
 							py={12}
@@ -1225,7 +1223,7 @@ export default function ContributionsFeed({
 				</>
 			)}
 
-			{!loading && !error && groups.length === 0 && (
+			{!loading && !error && page?.stats.questionsExplored === 0 && (
 				<Box
 					mt={6}
 					py={12}

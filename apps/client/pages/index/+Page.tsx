@@ -89,9 +89,6 @@ export default function Page() {
 	const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshot | null>(
 		null,
 	);
-	const [queueLoading, setQueueLoading] = useState(true);
-	const [queueError, setQueueError] = useState<string | null>(null);
-	const [queueRefreshKey, setQueueRefreshKey] = useState(0);
 
 	const contributionProblemsById = useMemo(() => {
 		const lookup: Record<string, ContributionProblem> = {};
@@ -186,26 +183,17 @@ export default function Page() {
 	}, [categories, manifest]);
 
 	useEffect(() => {
-		void queueRefreshKey;
 		const controller = new AbortController();
 
-		setQueueLoading(true);
-		setQueueError(null);
 		fetchQueueSnapshot(controller.signal)
 			.then(setQueueSnapshot)
 			.catch((error) => {
 				if (error instanceof DOMException && error.name === "AbortError")
 					return;
-				setQueueError(
-					"The live contribution service did not respond. The catalog itself is still available.",
-				);
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setQueueLoading(false);
 			});
 
 		return () => controller.abort();
-	}, [queueRefreshKey]);
+	}, []);
 
 	const filteredSections = sections
 		.map((sec) => ({
@@ -285,21 +273,9 @@ export default function Page() {
 			<Box pt={8}>
 				{showContributions ? (
 					<ContributionsFeed
-						submissions={queueSnapshot?.submissions || []}
-						researchEntries={queueSnapshot?.recentResearchEntries || []}
-						researchCountsByProblemId={
-							queueSnapshot?.researchCountsByProblemId || {}
-						}
-						lastResearchAtByProblemId={
-							queueSnapshot?.lastResearchAtByProblemId || {}
-						}
-						activeClaims={queueSnapshot?.activeClaims || []}
 						problemsById={contributionProblemsById}
 						categoryLabels={categoryLabels}
 						search={search}
-						loading={queueLoading}
-						error={queueError}
-						onRetry={() => setQueueRefreshKey((value) => value + 1)}
 						onBack={goBack}
 						onViewProblem={viewContributionProblem}
 					/>

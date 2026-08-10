@@ -154,12 +154,44 @@ export type QueueSnapshot = {
 	lastResearchAtByProblemId: Record<string, string>;
 };
 
+export type ResearchActivityFilter =
+	| "all"
+	| "solutions"
+	| "supported"
+	| "active";
+export type ResearchActivitySort = "recent" | "developed";
+
+export type ResearchActivityItem = {
+	problemId: string;
+	activeClaim: ProblemClaim | null;
+	submissions: SubmittedSolution[];
+	recentResearchEntries: ResearchEntry[];
+	researchCount: number;
+	lastResearchAt: string | null;
+	latestAt: string;
+};
+
+export type ResearchActivityPage = {
+	items: ResearchActivityItem[];
+	nextCursor: string | null;
+	total: number;
+	filterCounts: Record<ResearchActivityFilter, number>;
+	stats: {
+		questionsExplored: number;
+		totalUpdates: number;
+		candidateSolutions: number;
+		supportedUpdates: number;
+	};
+};
+
 const app = new Hono<{ Bindings: Bindings }>();
 
 const APP_VERSION = "0.1.0";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_PICK_LIMIT = 25;
 const MAX_PICK_LIMIT = 100;
+const DEFAULT_RESEARCH_ACTIVITY_LIMIT = 10;
+const MAX_RESEARCH_ACTIVITY_LIMIT = 50;
 const DEFAULT_LEASE_MINUTES = 120;
 const MAX_LEASE_MINUTES = 7 * 24 * 60;
 const DEFAULT_PAGES_ORIGIN = "https://geoffsee.github.io/open-questions";
@@ -572,6 +604,184 @@ export function createQueueSnapshot(state: QueueState): QueueSnapshot {
 			.slice(0, 50),
 		researchCountsByProblemId,
 		lastResearchAtByProblemId,
+	};
+}
+
+function latestIso(values: Array<string | null | undefined>) {
+	return (
+		values
+			.filter((value): value is string => Boolean(value))
+			.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] ?? null
+	);
+}
+
+function researchActivityEntryHasSupport(entry: ResearchEntry) {
+	return (
+		Boolean(entry.artifactUrl) ||
+		entry.kind === "reference" ||
+		hasUrl(entry.content)
+	);
+}
+
+function researchActivitySubmissionHasSupport(submission: SubmittedSolution) {
+	return (
+		Boolean(submission.artifactUrl) ||
+		Boolean(submission.evidence?.trim()) ||
+		hasUrl(submission.summary) ||
+		hasUrl(submission.approach ?? "")
+	);
+}
+
+export function createResearchActivityPage(
+	state: QueueState,
+	problems: ProblemRecord[],
+	options: {
+		limit?: number;
+		cursor?: string | null;
+		filter?: ResearchActivityFilter;
+		sort?: ResearchActivitySort;
+		query?: string;
+	} = {},
+): ResearchActivityPage {
+	const limit = Math.min(
+		Math.max(options.limit ?? DEFAULT_RESEARCH_ACTIVITY_LIMIT, 1),
+		MAX_RESEARCH_ACTIVITY_LIMIT,
+	);
+	const offset = options.cursor ? Number.parseInt(options.cursor, 10) : 0;
+	const filter = options.filter ?? "all";
+	const sort = options.sort ?? "recent";
+	const query = options.query?.trim().toLowerCase() ?? "";
+	const problemById = new Map(problems.map((problem) => [problem.id, problem]));
+	const problemIds = new Set<string>();
+
+	for (const [problemId, entries] of Object.entries(
+		state.researchEntriesByProblemId,
+	)) {
+		if (substantiveResearchEntries(entries).length > 0)
+			problemIds.add(problemId);
+	}
+	for (const [problemId, submissions] of Object.entries(
+		state.solutionsByProblemId,
+	)) {
+		if (submissions.length > 0) problemIds.add(problemId);
+	}
+	for (const [problemId, claim] of Object.entries(state.claimsByProblemId)) {
+		if (claim.status === "active") problemIds.add(problemId);
+	}
+
+	const allItems = Array.from(problemIds, (problemId): ResearchActivityItem => {
+		const researchEntries = substantiveResearchEntries(
+			state.researchEntriesByProblemId[problemId],
+		).sort(
+			(a, b) =>
+				new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+		);
+		const submissions = [...(state.solutionsByProblemId[problemId] ?? [])].sort(
+			(a, b) =>
+				new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
+		);
+		const claim = state.claimsByProblemId[problemId];
+		const activeClaim = claim?.status === "active" ? claim : null;
+		const lastResearchAt = researchEntries[0]?.createdAt ?? null;
+		const latestAt =
+			latestIso([
+				lastResearchAt,
+				activeClaim?.pickedUpAt,
+				...submissions.map((submission) => submission.submittedAt),
+			]) ?? "1970-01-01T00:00:00.000Z";
+
+		return {
+			problemId,
+			activeClaim,
+			submissions,
+			recentResearchEntries: researchEntries.slice(0, 2),
+			researchCount: researchEntries.length,
+			lastResearchAt,
+			latestAt,
+		};
+	});
+
+	const hasSupport = (item: ResearchActivityItem) =>
+		item.submissions.some(researchActivitySubmissionHasSupport) ||
+		item.recentResearchEntries.some(researchActivityEntryHasSupport) ||
+		substantiveResearchEntries(
+			state.researchEntriesByProblemId[item.problemId],
+		).some(researchActivityEntryHasSupport);
+	const filterCounts: Record<ResearchActivityFilter, number> = {
+		all: allItems.length,
+		solutions: allItems.filter((item) => item.submissions.length > 0).length,
+		supported: allItems.filter(hasSupport).length,
+		active: allItems.filter((item) => item.activeClaim).length,
+	};
+
+	const filteredItems = allItems
+		.filter((item) => {
+			if (filter === "solutions" && item.submissions.length === 0) return false;
+			if (filter === "supported" && !hasSupport(item)) return false;
+			if (filter === "active" && !item.activeClaim) return false;
+			if (!query) return true;
+
+			const problem = problemById.get(item.problemId);
+			const researchEntries = substantiveResearchEntries(
+				state.researchEntriesByProblemId[item.problemId],
+			);
+			return [
+				item.problemId,
+				problem?.category,
+				problem?.section,
+				problem?.text,
+				item.activeClaim?.agentId,
+				...item.submissions.flatMap((submission) => [
+					submission.title,
+					submission.summary,
+					submission.approach,
+					submission.evidence,
+					submission.agentId,
+				]),
+				...researchEntries.flatMap((entry) => [
+					entry.title,
+					entry.content,
+					entry.kind,
+					entry.agentId,
+				]),
+			]
+				.filter(Boolean)
+				.join(" ")
+				.toLowerCase()
+				.includes(query);
+		})
+		.sort((a, b) => {
+			if (sort === "developed") {
+				const difference =
+					b.researchCount +
+					b.submissions.length -
+					(a.researchCount + a.submissions.length);
+				if (difference !== 0) return difference;
+			}
+			const dateDifference =
+				new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime();
+			return dateDifference || a.problemId.localeCompare(b.problemId);
+		});
+	const items = filteredItems.slice(offset, offset + limit);
+	const nextOffset = offset + items.length;
+	const allResearchEntries = Object.values(
+		state.researchEntriesByProblemId,
+	).flatMap(substantiveResearchEntries);
+	const allSubmissions = Object.values(state.solutionsByProblemId).flat();
+
+	return {
+		items,
+		nextCursor: nextOffset < filteredItems.length ? String(nextOffset) : null,
+		total: filteredItems.length,
+		filterCounts,
+		stats: {
+			questionsExplored: allItems.length,
+			totalUpdates: allResearchEntries.length + allSubmissions.length,
+			candidateSolutions: allSubmissions.length,
+			supportedUpdates:
+				allResearchEntries.filter(researchActivityEntryHasSupport).length +
+				allSubmissions.filter(researchActivitySubmissionHasSupport).length,
+		},
 	};
 }
 
@@ -2113,6 +2323,7 @@ app.get("/", (c) =>
 		routes: [
 			"/health",
 			"/queue",
+			"/research-activity",
 			"/mcp",
 			"/auth/register",
 			"/auth/login",
@@ -2145,6 +2356,53 @@ app.get("/health", async (c) =>
 );
 
 app.get("/queue", async (c) => c.json(await getQueueSnapshot(c.env)));
+
+app.get("/research-activity", async (c) => {
+	const limitParam = c.req.query("limit");
+	const cursor = c.req.query("cursor") ?? null;
+	const filter = c.req.query("filter") ?? "all";
+	const sort = c.req.query("sort") ?? "recent";
+	const query = c.req.query("query") ?? "";
+
+	if (limitParam && !/^\d+$/.test(limitParam)) {
+		return jsonError("limit must be a positive integer.", 400);
+	}
+	const limit = limitParam
+		? Number.parseInt(limitParam, 10)
+		: DEFAULT_RESEARCH_ACTIVITY_LIMIT;
+	if (limit < 1 || limit > MAX_RESEARCH_ACTIVITY_LIMIT) {
+		return jsonError(
+			`limit must be between 1 and ${MAX_RESEARCH_ACTIVITY_LIMIT}.`,
+			400,
+		);
+	}
+	if (cursor && !/^\d+$/.test(cursor)) {
+		return jsonError("cursor is invalid.", 400);
+	}
+	if (!["all", "solutions", "supported", "active"].includes(filter)) {
+		return jsonError("filter is invalid.", 400);
+	}
+	if (!["recent", "developed"].includes(sort)) {
+		return jsonError("sort is invalid.", 400);
+	}
+
+	const [state, problems] = await Promise.all([
+		readQueueState(c.env),
+		loadProblems(c.env),
+	]);
+	if (!c.env?.PROBLEM_QUEUE && pruneExpiredClaims(state)) {
+		writeLocalQueueState(state);
+	}
+	return c.json(
+		createResearchActivityPage(state, problems, {
+			limit,
+			cursor,
+			filter: filter as ResearchActivityFilter,
+			sort: sort as ResearchActivitySort,
+			query,
+		}),
+	);
+});
 
 app.post("/auth/register", async (c) => {
 	let body: { username?: string; password?: string; name?: string } = {};

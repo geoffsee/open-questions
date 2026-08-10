@@ -3,6 +3,7 @@ import {
 	AGENT_RESEARCH_API_ORIGIN,
 	fetchProblemResearch,
 	fetchQueueSnapshot,
+	fetchResearchActivityPage,
 } from "./agentResearch";
 
 const originalFetch = globalThis.fetch;
@@ -101,6 +102,56 @@ describe("fetchProblemResearch", () => {
 
 		await expect(fetchProblemResearch("missing")).rejects.toThrow(
 			"Research request failed with 404",
+		);
+	});
+});
+
+describe("fetchResearchActivityPage", () => {
+	test("requests a cursor page with server-side filters", async () => {
+		const payload = {
+			items: [],
+			nextCursor: null,
+			total: 0,
+			filterCounts: { all: 0, solutions: 0, supported: 0, active: 0 },
+			stats: {
+				questionsExplored: 0,
+				totalUpdates: 0,
+				candidateSolutions: 0,
+				supportedUpdates: 0,
+			},
+		};
+
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const url = new URL(String(input));
+			expect(`${url.origin}${url.pathname}`).toBe(
+				`${AGENT_RESEARCH_API_ORIGIN}/research-activity`,
+			);
+			expect(Object.fromEntries(url.searchParams)).toEqual({
+				limit: "10",
+				filter: "supported",
+				sort: "developed",
+				cursor: "10",
+				query: "dark matter",
+			});
+			return new Response(JSON.stringify(payload), { status: 200 });
+		}) as typeof fetch;
+
+		await expect(
+			fetchResearchActivityPage({
+				cursor: "10",
+				filter: "supported",
+				sort: "developed",
+				query: " dark matter ",
+			}),
+		).resolves.toEqual(payload);
+	});
+
+	test("throws on failed page requests", async () => {
+		globalThis.fetch = (async () =>
+			new Response("nope", { status: 500 })) as unknown as typeof fetch;
+
+		await expect(fetchResearchActivityPage()).rejects.toThrow(
+			"Research activity request failed with 500",
 		);
 	});
 });
