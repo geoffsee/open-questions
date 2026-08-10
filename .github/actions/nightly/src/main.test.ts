@@ -1,9 +1,46 @@
 import { describe, expect, test } from "bun:test";
 import {
+	ensurePagesAllowsMain,
 	hasCachedProblems,
 	normalizeProblemData,
 	publishCachedProblems,
 } from "./main";
+
+describe("ensurePagesAllowsMain", () => {
+	test("posts main when the policy list omits it", async () => {
+		const calls: Array<{ url: string; method?: string }> = [];
+		const fetchImpl: typeof fetch = async (input, init) => {
+			const url = String(input);
+			calls.push({ url, method: init?.method ?? "GET" });
+			if (init?.method === "POST") {
+				return new Response(JSON.stringify({ name: "main" }), { status: 200 });
+			}
+			return new Response(
+				JSON.stringify({ branch_policies: [{ name: "master" }] }),
+				{ status: 200 },
+			);
+		};
+		process.env.GITHUB_TOKEN = "test-token";
+		process.env.GITHUB_REPOSITORY = "geoffsee/open-questions";
+		await ensurePagesAllowsMain(fetchImpl);
+		expect(calls.some((c) => c.method === "POST")).toBe(true);
+	});
+
+	test("skips create when main is already allowed", async () => {
+		const methods: string[] = [];
+		const fetchImpl: typeof fetch = async (_input, init) => {
+			methods.push(init?.method ?? "GET");
+			return new Response(
+				JSON.stringify({ branch_policies: [{ name: "main" }] }),
+				{ status: 200 },
+			);
+		};
+		process.env.GITHUB_TOKEN = "test-token";
+		process.env.GITHUB_REPOSITORY = "geoffsee/open-questions";
+		await ensurePagesAllowsMain(fetchImpl);
+		expect(methods).toEqual(["GET"]);
+	});
+});
 
 describe("nightly data cache", () => {
 	test("detects an existing problems file", () => {

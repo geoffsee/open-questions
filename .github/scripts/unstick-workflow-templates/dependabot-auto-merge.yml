@@ -1,0 +1,36 @@
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for non-major updates
+        if: >
+          steps.metadata.outputs.dependency-group != 'bun-major' &&
+          steps.metadata.outputs.dependency-group != 'cargo-major' &&
+          steps.metadata.outputs.update-type != 'version-update:semver-major'
+        # RELEASE_TOKEN so the merge push triggers Auto Tag / Nightly.
+        # Merges with GITHUB_TOKEN do not create workflow runs.
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::RELEASE_TOKEN is not set; Dependabot merges would not trigger Auto Tag"
+            exit 1
+          fi
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
