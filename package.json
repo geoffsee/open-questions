@@ -1,7 +1,7 @@
 {
 	"name": "open-questions",
 	"private": true,
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"license": "UNLICENSED",
 	"author": "geoffsee",
 	"type": "module",
@@ -26,9 +26,9 @@
 	"devDependencies": {
 		"@actions/core": "^3.0.1",
 		"@actions/exec": "^3.0.0",
-		"@biomejs/biome": "2.5.7",
-		"@types/node": "^26.1.2",
-		"@vercel/ncc": "^0.44.1"
+		"@biomejs/biome": "2.5.8",
+		"@types/node": "^26.2.0",
+		"@vercel/ncc": "^0.45.0"
 	},
 	"overrides": {
 		"zod": "4.4.3"
