@@ -1,36 +1,36 @@
 {
-	"name": "open-questions",
-	"private": true,
-	"version": "0.0.6",
-	"license": "UNLICENSED",
-	"author": "geoffsee",
-	"type": "module",
-	"workspaces": [
-		"apps/*"
-	],
-	"scripts": {
-		"publish-cli": "bun run --cwd apps/client build:cli",
-		"postinstall": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
-		"lint": "biome check .",
-		"lint:fix": "biome check --write .",
-		"format": "biome format --write .",
-		"typecheck": "bun run --workspaces typecheck",
-		"test": "bun test --coverage",
-		"actions:build": "bunx ncc build .github/actions/nightly/src/index.ts -o .github/actions/nightly/dist && bunx ncc build .github/actions/docker-smoke-test/src/index.ts -o .github/actions/docker-smoke-test/dist && bunx ncc build .github/actions/morning-contribution/src/index.ts -o .github/actions/morning-contribution/dist",
-		"actions:mux": "muxox --config muxox.toml --port 3032",
-		"actions:server": "bun --cwd apps/action-server start",
-		"contributor:dev:anthropic": "cd apps/example && env -u ANTHROPIC_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:anthropic",
-		"contributor:dev:cursor": "cd apps/example && env -u ANTHROPIC_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:cursor",
-		"contributor:dev:openai": "cd apps/example && env -u OPENAI_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:openai"
-	},
-	"devDependencies": {
-		"@actions/core": "^3.0.1",
-		"@actions/exec": "^3.0.0",
-		"@biomejs/biome": "2.5.9",
-		"@types/node": "^26.2.0",
-		"@vercel/ncc": "^0.45.0"
-	},
-	"overrides": {
-		"zod": "4.4.3"
-	}
+  "name": "open-questions",
+  "private": true,
+  "version": "0.0.7",
+  "license": "UNLICENSED",
+  "author": "geoffsee",
+  "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "publish-cli": "bun run --cwd apps/client build:cli",
+    "postinstall": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "bun run --workspaces typecheck",
+    "test": "bun test --coverage",
+    "actions:build": "bunx ncc build .github/actions/nightly/src/index.ts -o .github/actions/nightly/dist && bunx ncc build .github/actions/docker-smoke-test/src/index.ts -o .github/actions/docker-smoke-test/dist && bunx ncc build .github/actions/morning-contribution/src/index.ts -o .github/actions/morning-contribution/dist",
+    "actions:mux": "muxox --config muxox.toml --port 3032",
+    "actions:server": "bun --cwd apps/action-server start",
+    "contributor:dev:anthropic": "cd apps/example && env -u ANTHROPIC_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:anthropic",
+    "contributor:dev:cursor": "cd apps/example && env -u ANTHROPIC_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:cursor",
+    "contributor:dev:openai": "cd apps/example && env -u OPENAI_API_KEY -u OPENALEX_API_KEY -u OPENALEX_MAILTO -u SEARXNG_URL bun --env-file=../../.env.morning-contributor run start:openai"
+  },
+  "devDependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^3.0.0",
+    "@biomejs/biome": "2.5.9",
+    "@types/node": "^26.2.0",
+    "@vercel/ncc": "^0.45.0"
+  },
+  "overrides": {
+    "zod": "4.4.3"
+  }
 }
