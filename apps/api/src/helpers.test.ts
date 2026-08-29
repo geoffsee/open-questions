@@ -4,6 +4,7 @@ import {
 	createCatalogSummary,
 	createClaimRecord,
 	createQueueSnapshot,
+	createResearchActivityPage,
 	createResearchEntryRecord,
 	createSubmissionRecord,
 	filterProblems,
@@ -70,6 +71,72 @@ const sampleProblems: ProblemRecord[] = [
 		text: "P versus NP",
 	}),
 ];
+
+describe("createResearchActivityPage", () => {
+	const researchProblems = Array.from({ length: 12 }, (_, index) =>
+		problem({
+			id: `problem-${index + 1}`,
+			category: "test",
+			...(index === 4 ? { text: "A searchable dark matter question" } : {}),
+		}),
+	);
+	const state = emptyState({
+		researchEntriesByProblemId: Object.fromEntries(
+			researchProblems.map((item, index) => [
+				item.id,
+				[
+					{
+						entryId: `research-${index + 1}`,
+						problemId: item.id,
+						agentId: "test-agent",
+						kind: "note" as const,
+						createdAt: `2026-01-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`,
+						title: `Update ${index + 1}`,
+						content:
+							index === 11
+								? "Supported by https://example.com/source"
+								: "Research note",
+						artifactUrl: null,
+					},
+				],
+			]),
+		),
+	});
+
+	test("returns stable ten-item cursor pages newest first", () => {
+		const first = createResearchActivityPage(state, researchProblems);
+		expect(first.items).toHaveLength(10);
+		expect(first.items[0]?.problemId).toBe("problem-12");
+		expect(first.nextCursor).toBe("10");
+		expect(first.total).toBe(12);
+
+		const second = createResearchActivityPage(state, researchProblems, {
+			cursor: first.nextCursor,
+		});
+		expect(second.items.map((item) => item.problemId)).toEqual([
+			"problem-2",
+			"problem-1",
+		]);
+		expect(second.nextCursor).toBeNull();
+	});
+
+	test("applies search and support filters before pagination", () => {
+		const searched = createResearchActivityPage(state, researchProblems, {
+			query: "dark matter",
+		});
+		expect(searched.items.map((item) => item.problemId)).toEqual(["problem-5"]);
+		expect(searched.total).toBe(1);
+
+		const supported = createResearchActivityPage(state, researchProblems, {
+			filter: "supported",
+		});
+		expect(supported.items.map((item) => item.problemId)).toEqual([
+			"problem-12",
+		]);
+		expect(supported.filterCounts.supported).toBe(1);
+		expect(supported.stats.totalUpdates).toBe(12);
+	});
+});
 
 describe("normalizeText / normalizeMultilineText / hasUrl", () => {
 	test("collapses interior whitespace", () => {

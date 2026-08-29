@@ -44,6 +44,36 @@ export interface QueueSnapshot {
 	lastResearchAtByProblemId: Record<string, string>;
 }
 
+export type ResearchActivityFilter =
+	| "all"
+	| "solutions"
+	| "supported"
+	| "active";
+export type ResearchActivitySort = "recent" | "developed";
+
+export interface ResearchActivityItem {
+	problemId: string;
+	activeClaim: LiveClaim | null;
+	submissions: SubmittedSolution[];
+	recentResearchEntries: ResearchEntry[];
+	researchCount: number;
+	lastResearchAt: string | null;
+	latestAt: string;
+}
+
+export interface ResearchActivityPage {
+	items: ResearchActivityItem[];
+	nextCursor: string | null;
+	total: number;
+	filterCounts: Record<ResearchActivityFilter, number>;
+	stats: {
+		questionsExplored: number;
+		totalUpdates: number;
+		candidateSolutions: number;
+		supportedUpdates: number;
+	};
+}
+
 export type LiveProblemState = {
 	activeClaim: LiveClaim | null;
 	researchCount: number;
@@ -59,6 +89,35 @@ export async function fetchQueueSnapshot(
 	});
 	if (!response.ok) {
 		throw new Error(`Queue request failed with ${response.status}`);
+	}
+
+	return response.json();
+}
+
+export async function fetchResearchActivityPage(
+	options: {
+		limit?: number;
+		cursor?: string | null;
+		filter?: ResearchActivityFilter;
+		sort?: ResearchActivitySort;
+		query?: string;
+		signal?: AbortSignal;
+	} = {},
+): Promise<ResearchActivityPage> {
+	const params = new URLSearchParams({
+		limit: String(options.limit ?? 10),
+		filter: options.filter ?? "all",
+		sort: options.sort ?? "recent",
+	});
+	if (options.cursor) params.set("cursor", options.cursor);
+	if (options.query?.trim()) params.set("query", options.query.trim());
+
+	const response = await fetch(
+		`${AGENT_RESEARCH_API_ORIGIN}/research-activity?${params}`,
+		{ signal: options.signal },
+	);
+	if (!response.ok) {
+		throw new Error(`Research activity request failed with ${response.status}`);
 	}
 
 	return response.json();
