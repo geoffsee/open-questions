@@ -99,6 +99,33 @@ async function loadApiKey(): Promise<string> {
 	return Bun.env.PERIGON_API_KEY || "";
 }
 
+/** Retry transient Perigon rate limits (429) before failing. */
+export async function perigonRequest(
+	params: URLSearchParams,
+	apiKey: string,
+	retries = 4,
+): Promise<Response> {
+	const url = `https://api.goperigon.com/v1/all?${params}`;
+	for (let attempt = 0; attempt <= retries; attempt++) {
+		const res = await fetch(url, {
+			headers: { "x-api-key": apiKey },
+		});
+		if (res.ok) return res;
+		if (res.status === 429 && attempt < retries) {
+			const retryAfter = Number(res.headers.get("retry-after"));
+			const wait =
+				Number.isFinite(retryAfter) && retryAfter > 0
+					? retryAfter * 1000
+					: Math.min(60_000, 5_000 * 2 ** attempt);
+			console.log(`    Rate limited, waiting ${wait / 1000}s...`);
+			await Bun.sleep(wait);
+			continue;
+		}
+		return res;
+	}
+	throw new Error("Perigon API request failed");
+}
+
 function normalize(t: string): string {
 	return t
 		.toLowerCase()
@@ -250,9 +277,7 @@ export async function main(): Promise<void> {
 			...(source.size ? { size: String(source.size) } : {}),
 			...(source.sortBy ? { sortBy: String(source.sortBy) } : {}),
 		});
-		const res = await fetch(`https://api.goperigon.com/v1/all?${params}`, {
-			headers: { "x-api-key": apiKey },
-		});
+		const res = await perigonRequest(params, apiKey);
 		if (!res.ok) {
 			throw new Error(
 				`Perigon API error for ${key}: ${res.status} ${await res.text()}`,

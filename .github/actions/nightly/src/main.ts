@@ -236,7 +236,18 @@ export async function run(): Promise<void> {
 		} else {
 			await command(client, ["run", "fetch-data"]);
 		}
-		await command(client, ["run", "fetch-news"]);
+		try {
+			await command(client, ["run", "fetch-news"]);
+		} catch (error) {
+			const newsPath = resolve(client, "public/data/news.json");
+			if (existsSync(newsPath)) {
+				core.warning(
+					`News refresh failed; using cached news.json: ${String(error)}`,
+				);
+			} else {
+				throw error;
+			}
+		}
 		await command(client, ["run", "fetch-cases"]);
 		try {
 			await command(client, ["run", "enrich-data"]);
