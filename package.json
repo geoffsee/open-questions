@@ -26,8 +26,8 @@
 	"devDependencies": {
 		"@actions/core": "^3.0.1",
 		"@actions/exec": "^3.0.0",
-		"@biomejs/biome": "2.5.13",
-		"@types/node": "^26.5.1",
+		"@biomejs/biome": "2.5.14",
+		"@types/node": "^26.6.1",
 		"@vercel/ncc": "^0.45.0"
 	},
 	"overrides": {
