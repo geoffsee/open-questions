@@ -21,7 +21,7 @@
 	"dependencies": {
 		"@universal-middleware/core": "^0.4.18",
 		"@vikejs/h3": "^0.2.1",
-		"h3": "~1.15.11",
+		"h3": "~2.0.2",
 		"marked": "^18.0.14",
 		"react": "^19.3.0",
 		"react-dom": "^19.3.0",
