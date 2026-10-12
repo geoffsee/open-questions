@@ -28,10 +28,18 @@ jobs:
             exit 1
           fi
 
+          # Rulesets often report a behind PR as BLOCKED instead of BEHIND.
           gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open \
             --json number,author,isDraft,mergeStateStatus \
-            --jq '.[] | select(.isDraft|not) | select(.mergeStateStatus == "BEHIND") | "\(.number)\t\(.author.login)"' \
-          | while IFS=$'\t' read -r number author; do
+            --jq '.[] | select(.isDraft|not) | select(.mergeStateStatus == "BEHIND" or .mergeStateStatus == "BLOCKED" or .mergeStateStatus == "UNKNOWN") | "\(.number)\t\(.author.login)\t\(.mergeStateStatus)"' \
+          | while IFS=$'\t' read -r number author state; do
+              if [ "$state" != "BEHIND" ]; then
+                mergeable_state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq .mergeable_state)"
+                if [ "$mergeable_state" != "behind" ]; then
+                  echo "Skipping PR #$number ($author, $state / ${mergeable_state:-unknown})"
+                  continue
+                fi
+              fi
               echo "Updating PR #$number ($author)..."
               case "$author" in
                 dependabot[bot]|app/dependabot)

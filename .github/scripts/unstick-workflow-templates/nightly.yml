@@ -6,7 +6,10 @@ on:
     - cron: "0 3 * * *"
   workflow_dispatch: # Allow manual trigger
   push:
-    branches: [main]
+    # `master` is the only branch the github-pages environment allows.
+    # Pushes to main sync master, which retriggers this workflow so deploy
+    # runs from an allowed branch (RELEASE_TOKEN cannot workflow_dispatch).
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -78,7 +81,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
-      - name: Point master at this commit and dispatch deploy
+      - name: Point master at this commit
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
@@ -87,8 +90,8 @@ jobs:
             echo "::error::RELEASE_TOKEN is not set; cannot sync master for Pages deploy"
             exit 1
           fi
+          # Pushing master retriggers this workflow; deploy is limited to master.
           git push origin "HEAD:master"
-          gh workflow run "Nightly Build & Deploy" --ref master
 
   deploy:
     needs: build

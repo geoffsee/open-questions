@@ -1,4 +1,5 @@
 version: 2
+# Version updates run weekly on Monday at 09:00 UTC.
 updates:
   - package-ecosystem: "bun"
     directory: "/"
