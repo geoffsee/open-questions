@@ -16,17 +16,14 @@ updates:
     assignees:
       - "geoffsee"
     groups:
+      # Majors stay ungrouped. A wildcard bun-major group with an open PR
+      # marks every dependency handled, so minor and patch updates never open.
       bun-minor-and-patch:
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
-      bun-major:
-        patterns:
-          - "*"
-        update-types:
-          - "major"
     commit-message:
       prefix: "deps"
       include: "scope"

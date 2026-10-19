@@ -29,24 +29,31 @@ jobs:
           fi
 
           # Rulesets often report a behind PR as BLOCKED instead of BEHIND.
+          # DIRTY is a conflicted Dependabot PR that only a rebase can refresh.
           gh pr list --repo "$GITHUB_REPOSITORY" --base main --state open \
             --json number,author,isDraft,mergeStateStatus \
-            --jq '.[] | select(.isDraft|not) | select(.mergeStateStatus == "BEHIND" or .mergeStateStatus == "BLOCKED" or .mergeStateStatus == "UNKNOWN") | "\(.number)\t\(.author.login)\t\(.mergeStateStatus)"' \
+            --jq '.[] | select(.isDraft|not) | select(.mergeStateStatus == "BEHIND" or .mergeStateStatus == "BLOCKED" or .mergeStateStatus == "UNKNOWN" or .mergeStateStatus == "DIRTY") | "\(.number)\t\(.author.login)\t\(.mergeStateStatus)"' \
           | while IFS=$'\t' read -r number author state; do
+              mergeable_state=""
               if [ "$state" != "BEHIND" ]; then
                 mergeable_state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq .mergeable_state)"
-                if [ "$mergeable_state" != "behind" ]; then
-                  echo "Skipping PR #$number ($author, $state / ${mergeable_state:-unknown})"
-                  continue
-                fi
               fi
-              echo "Updating PR #$number ($author)..."
               case "$author" in
                 dependabot[bot]|app/dependabot)
-                  # Dependabot rebase retriggers checks; GITHUB_TOKEN branch updates do not.
-                  gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "@dependabot rebase"
+                  if [ "$state" = "BEHIND" ] || [ "$state" = "DIRTY" ] || [ "$mergeable_state" = "behind" ] || [ "$mergeable_state" = "dirty" ]; then
+                    echo "Rebasing PR #$number ($author, $state / ${mergeable_state:-behind})..."
+                    # Dependabot rebase retriggers checks; GITHUB_TOKEN branch updates do not.
+                    gh pr comment "$number" --repo "$GITHUB_REPOSITORY" --body "@dependabot rebase"
+                  else
+                    echo "Skipping PR #$number ($author, $state / ${mergeable_state:-unknown})"
+                  fi
                   ;;
                 *)
+                  if [ "$state" != "BEHIND" ] && [ "$mergeable_state" != "behind" ]; then
+                    echo "Skipping PR #$number ($author, $state / ${mergeable_state:-unknown})"
+                    continue
+                  fi
+                  echo "Updating PR #$number ($author)..."
                   gh pr update-branch "$number" --repo "$GITHUB_REPOSITORY" || {
                     echo "Skipped PR #$number (update failed — likely conflicts)"
                   }
