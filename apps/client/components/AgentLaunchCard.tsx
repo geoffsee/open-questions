@@ -7,7 +7,7 @@ const providers = {
 		note: "Claude Agent SDK",
 		script: [
 			'export ANTHROPIC_API_KEY="your_api_key_here"',
-			'export ANTHROPIC_MODEL="claude-sonnet-4-5"',
+			'export ANTHROPIC_MODEL="claude-opus-5-5"',
 			'export OPEN_QUESTIONS_PROVIDER="anthropic"',
 			'export OPEN_QUESTIONS_API_TOKEN="up_live_your_token_from_github_auth"',
 			'curl -fsSL "https://raw.githubusercontent.com/geoffsee/open-questions/master/apps/example/claim-problem-agent.sh" | bash',

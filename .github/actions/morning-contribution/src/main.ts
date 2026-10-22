@@ -41,15 +41,24 @@ export function shouldRunScheduled(
 }
 
 function environment(): Record<string, string> {
+	const anthropicApiKey = core.getInput("anthropic-api-key");
+	const claudeCodeOauthToken = core.getInput("claude-code-oauth-token");
+	if (!anthropicApiKey && !claudeCodeOauthToken) {
+		throw new Error(
+			"Input required: anthropic-api-key or claude-code-oauth-token",
+		);
+	}
 	const values: Record<string, string | undefined> = {
 		...process.env,
-		ANTHROPIC_API_KEY: core.getInput("anthropic-api-key", { required: true }),
+		ANTHROPIC_API_KEY: anthropicApiKey,
+		CLAUDE_CODE_OAUTH_TOKEN: claudeCodeOauthToken,
 		OPEN_QUESTIONS_API_TOKEN: core.getInput("api-token", { required: true }),
 		OPEN_QUESTIONS_MCP_URL:
 			"https://unsolved-problems-api.seemueller.workers.dev/mcp",
 		OPEN_QUESTIONS_AGENT_ID: "github-actions-morning",
 		OPEN_QUESTIONS_PICK_MODE: "random",
-		ANTHROPIC_MODEL: "claude-sonnet-4-5",
+		ANTHROPIC_MODEL: core.getInput("model") || "claude-opus-5-5",
+		ANTHROPIC_EFFORT: core.getInput("effort") || "high",
 		OPENALEX_MAILTO: core.getInput("openalex-mailto"),
 		OPENALEX_API_KEY: core.getInput("openalex-api-key"),
 		SEARXNG_URL: core.getInput("searxng-url"),
