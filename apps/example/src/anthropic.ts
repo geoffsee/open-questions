@@ -395,7 +395,9 @@ if (import.meta.main) {
 }
 
 /** One tool-free model call that keeps only a substantive news connection. */
-const rerankNewsMatches: NewsReranker = async (shortlist) => {
+async function rerankNewsMatches(
+	shortlist: Parameters<NewsReranker>[0],
+): ReturnType<NewsReranker> {
 	let reply = "";
 	for await (const message of query({
 		prompt: buildRerankPrompt(shortlist),
@@ -422,7 +424,7 @@ const rerankNewsMatches: NewsReranker = async (shortlist) => {
 		rationale: choice?.rationale ?? null,
 	});
 	return choice;
-};
+}
 
 function parseEffort(value: string | undefined, fallback: Effort): Effort {
 	if (!value) return fallback;
