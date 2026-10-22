@@ -2,8 +2,17 @@ name: Morning agent contribution
 description: Installs the contributor and submits one morning research contribution.
 inputs:
   anthropic-api-key:
-    description: Anthropic API key
-    required: true
+    description: Anthropic API key (this or claude-code-oauth-token is required)
+    required: false
+  claude-code-oauth-token:
+    description: Claude Code OAuth token from `claude setup-token`
+    required: false
+  model:
+    description: Claude model ID (defaults to claude-opus-5-5)
+    required: false
+  effort:
+    description: Reasoning effort - low, medium, high, xhigh or max (defaults to high)
+    required: false
   api-token:
     description: Open Questions contributor token
     required: true

@@ -25,7 +25,10 @@ jobs:
         uses: ./.github/actions/morning-contribution
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude-code-oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           api-token: ${{ secrets.OPEN_QUESTIONS_API_TOKEN }}
+          model: ${{ vars.ANTHROPIC_MODEL }}
+          effort: ${{ vars.ANTHROPIC_EFFORT }}
           openalex-mailto: ${{ secrets.OPENALEX_MAILTO }}
           openalex-api-key: ${{ secrets.OPENALEX_API_KEY }}
           searxng-url: ${{ secrets.SEARXNG_URL }}

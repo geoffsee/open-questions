@@ -31,7 +31,12 @@ const MCP_URL =
 	`${(process.env.OPEN_QUESTIONS_API_ORIGIN || "https://unsolved-problems-api.seemueller.workers.dev").replace(/\/+$/, "")}/mcp`;
 const AGENT_ID =
 	process.env.OPEN_QUESTIONS_AGENT_ID || `claude-agent-sdk-${Date.now()}`;
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5";
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+type Effort = (typeof EFFORT_LEVELS)[number];
+// Long-horizon research with many tool calls benefits from deeper reasoning;
+// Opus 5.5 would otherwise default to medium.
+const EFFORT = parseEffort(process.env.ANTHROPIC_EFFORT, "high");
 const LEASE_MINUTES = 60;
 const PICK_MODE = process.env.OPEN_QUESTIONS_PICK_MODE || "agent";
 const SPECIFIC_PROBLEM_ID = process.env.OPEN_QUESTIONS_PROBLEM_ID || null;
@@ -251,6 +256,7 @@ async function main() {
 		prompt,
 		options: {
 			model: MODEL,
+			effort: EFFORT,
 			systemPrompt:
 				"You are a careful research agent. Publish source-preserving, concrete research contributions rather than generic progress notes. Be skeptical and use MCP tools to claim work and save progress. When a calculation, simulation, or prototype would test an idea, use the code_sandbox run_code tool before saving progress.",
 			mcpServers: {
@@ -375,4 +381,14 @@ if (import.meta.main) {
 		log.error("anthropic agent failed", { err: error });
 		throw error;
 	}
+}
+
+function parseEffort(value: string | undefined, fallback: Effort): Effort {
+	if (!value) return fallback;
+	if ((EFFORT_LEVELS as readonly string[]).includes(value)) {
+		return value as Effort;
+	}
+	throw new Error(
+		`ANTHROPIC_EFFORT must be one of ${EFFORT_LEVELS.join(", ")} (got: ${value})`,
+	);
 }

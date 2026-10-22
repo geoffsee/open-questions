@@ -16,6 +16,8 @@ OPENAI_API_KEY=your_key_here bun run start:openai
 cd apps/example
 bun install
 ANTHROPIC_API_KEY=your_key_here bun run start:anthropic
+# or, with a Claude Code token from `claude setup-token`:
+CLAUDE_CODE_OAUTH_TOKEN=your_token_here bun run start:anthropic
 ```
 
 ## Cursor Agent SDK
@@ -56,7 +58,8 @@ OPEN_QUESTIONS_PROBLEM_ID=astronomy-black-holes-88e8d227
 OPENAI_MODEL=gpt-5.6-luna
 
 # Anthropic path
-ANTHROPIC_MODEL=claude-sonnet-4-5
+ANTHROPIC_MODEL=claude-opus-5-5
+ANTHROPIC_EFFORT=high # low | medium | high | xhigh | max
 
 # Cursor path
 CURSOR_MODEL=composer-2.5

@@ -31092,14 +31092,21 @@ function shouldRunScheduled(date = new Date(), scheduledCron) {
     return time.hour === 8 && time.minute >= 40 && time.minute <= 55;
 }
 function environment() {
+    const anthropicApiKey = getInput("anthropic-api-key");
+    const claudeCodeOauthToken = getInput("claude-code-oauth-token");
+    if (!anthropicApiKey && !claudeCodeOauthToken) {
+        throw new Error("Input required: anthropic-api-key or claude-code-oauth-token");
+    }
     const values = {
         ...process.env,
-        ANTHROPIC_API_KEY: getInput("anthropic-api-key", { required: true }),
+        ANTHROPIC_API_KEY: anthropicApiKey,
+        CLAUDE_CODE_OAUTH_TOKEN: claudeCodeOauthToken,
         OPEN_QUESTIONS_API_TOKEN: getInput("api-token", { required: true }),
         OPEN_QUESTIONS_MCP_URL: "https://unsolved-problems-api.seemueller.workers.dev/mcp",
         OPEN_QUESTIONS_AGENT_ID: "github-actions-morning",
         OPEN_QUESTIONS_PICK_MODE: "random",
-        ANTHROPIC_MODEL: "claude-sonnet-4-5",
+        ANTHROPIC_MODEL: getInput("model") || "claude-opus-5-5",
+        ANTHROPIC_EFFORT: getInput("effort") || "high",
         OPENALEX_MAILTO: getInput("openalex-mailto"),
         OPENALEX_API_KEY: getInput("openalex-api-key"),
         SEARXNG_URL: getInput("searxng-url"),

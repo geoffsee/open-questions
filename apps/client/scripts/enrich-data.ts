@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 /**
  * Enriches problem data with AI-generated summaries using the Anthropic SDK.
+ * With only CLAUDE_CODE_OAUTH_TOKEN set, requests go through the Claude Agent
+ * SDK instead, since the Messages API does not accept Claude Code tokens.
  *
- * Reads public/data/problems.json, sends batches to Claude Sonnet,
+ * Reads public/data/problems.json, sends batches to Claude Opus,
  * and writes public/data/enrichments.json. Supports incremental updates —
  * only processes problems not already in the enrichments cache.
  */
 
 import { resolve } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import Anthropic from "@anthropic-ai/sdk";
 import type { EnrichmentProblem, Section } from "../lib/wiki";
 import { publish } from "./publish";
@@ -15,7 +18,23 @@ import { publish } from "./publish";
 const PROBLEMS_PATH = resolve("public/data/problems.json");
 const ENRICHMENTS_PATH = resolve("public/data/enrichments.json");
 
-const MODEL = "claude-opus-4-8";
+const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
+type Effort = (typeof EFFORT_LEVELS)[number];
+
+function parseEffort(value: string | undefined, fallback: Effort): Effort {
+	if (!value) return fallback;
+	if ((EFFORT_LEVELS as readonly string[]).includes(value)) {
+		return value as Effort;
+	}
+	throw new Error(
+		`ENRICH_EFFORT must be one of ${EFFORT_LEVELS.join(", ")} (got: ${value})`,
+	);
+}
+
+const MODEL = Bun.env.ENRICH_MODEL || "claude-opus-5-5";
+// Short, well-specified extraction: low effort keeps thinking (always on for
+// Opus 5.5) cheap without hurting output quality.
+const EFFORT = parseEffort(Bun.env.ENRICH_EFFORT, "low");
 const BATCH_SIZE = 20;
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
@@ -83,25 +102,65 @@ function buildUserPrompt(batch: ProblemItem[]): string {
 	return `Generate metadata for these ${batch.length} unsolved problems:\n\n${lines.join("\n")}`;
 }
 
+type Complete = (systemPrompt: string, userPrompt: string) => Promise<string>;
+
+function messagesApiComplete(client: Anthropic): Complete {
+	return async (systemPrompt, userPrompt) => {
+		const response = await client.beta.messages.create({
+			model: MODEL,
+			max_tokens: 16000,
+			output_config: { effort: EFFORT },
+			betas: ["server-side-fallback-2026-07-01"],
+			fallbacks: "default",
+			system: systemPrompt,
+			messages: [{ role: "user", content: userPrompt }],
+		});
+		if (response.stop_reason === "refusal") {
+			throw new Error(
+				`Request refused (${response.stop_details?.category ?? "unknown"})`,
+			);
+		}
+		// Thinking blocks precede the answer, so find the text block.
+		const block = response.content.find((b) => b.type === "text");
+		if (block?.type !== "text") {
+			throw new Error("Unexpected Anthropic response content");
+		}
+		return block.text;
+	};
+}
+
+const claudeCodeComplete: Complete = async (systemPrompt, userPrompt) => {
+	for await (const message of query({
+		prompt: userPrompt,
+		options: {
+			model: MODEL,
+			effort: EFFORT,
+			systemPrompt,
+			tools: [],
+			maxTurns: 1,
+			settingSources: [],
+			persistSession: false,
+		},
+	})) {
+		if (message.type !== "result") continue;
+		if (message.subtype !== "success" || message.is_error) {
+			throw new Error(`Claude Code request failed (${message.subtype})`);
+		}
+		return message.result;
+	}
+	throw new Error("Claude Code returned no result");
+};
+
 async function callWithRetry(
-	client: Anthropic,
-	messages: Anthropic.MessageParam[],
+	complete: Complete,
+	userPrompt: string,
 	systemPrompt: string,
 ): Promise<EnrichmentProblem[]> {
 	let lastError: unknown;
 	for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
 		try {
-			const response = await client.messages.create({
-				model: MODEL,
-				max_tokens: 4096,
-				system: systemPrompt,
-				messages,
-			});
-			const block = response.content[0];
-			if (block?.type !== "text") {
-				throw new Error("Unexpected Anthropic response content");
-			}
-			return JSON.parse(block.text) as EnrichmentProblem[];
+			const text = await complete(systemPrompt, userPrompt);
+			return JSON.parse(text) as EnrichmentProblem[];
 		} catch (err) {
 			lastError = err;
 			const status =
@@ -135,8 +194,10 @@ async function saveEnrichments(
 }
 
 async function main(): Promise<void> {
-	if (!Bun.env.ANTHROPIC_API_KEY) {
-		console.warn("ANTHROPIC_API_KEY not set — skipping enrichment.");
+	if (!Bun.env.ANTHROPIC_API_KEY && !Bun.env.CLAUDE_CODE_OAUTH_TOKEN) {
+		console.warn(
+			"Neither ANTHROPIC_API_KEY nor CLAUDE_CODE_OAUTH_TOKEN set — skipping enrichment.",
+		);
 		return;
 	}
 
@@ -147,7 +208,9 @@ async function main(): Promise<void> {
 
 	console.log("Enriching problem data with AI...\n");
 
-	const client = new Anthropic();
+	const complete = Bun.env.ANTHROPIC_API_KEY
+		? messagesApiComplete(new Anthropic())
+		: claudeCodeComplete;
 	const allProblems = await loadProblems();
 	const existing = await loadExistingEnrichments();
 
@@ -178,8 +241,8 @@ async function main(): Promise<void> {
 
 		try {
 			const results = await callWithRetry(
-				client,
-				[{ role: "user", content: buildUserPrompt(batch) }],
+				complete,
+				buildUserPrompt(batch),
 				systemPrompt,
 			);
 

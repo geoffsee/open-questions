@@ -24,8 +24,8 @@ case "${PROVIDER}" in
     start_script="start:openai"
     ;;
   anthropic)
-    if [[ -z "${ANTHROPIC_API_KEY:-}" ]]; then
-      echo "ANTHROPIC_API_KEY must be set before running this script." >&2
+    if [[ -z "${ANTHROPIC_API_KEY:-}" && -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+      echo "ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN must be set before running this script." >&2
       exit 1
     fi
     start_script="start:anthropic"

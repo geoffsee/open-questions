@@ -48,6 +48,9 @@ jobs:
         env:
           PERIGON_API_KEY: ${{ secrets.PERIGON_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ENRICH_MODEL: ${{ vars.ENRICH_MODEL }}
+          ENRICH_EFFORT: ${{ vars.ENRICH_EFFORT }}
           PUBLISH_API_ORIGIN: ${{ secrets.PUBLISH_API_ORIGIN }}
           PUBLISH_KEY: ${{ secrets.PUBLISH_KEY }}
           VITE_API_ORIGIN: ${{ secrets.PUBLISH_API_ORIGIN }}
