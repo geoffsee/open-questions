@@ -1,3 +1,13 @@
+import {
+	buildNewsContext,
+	fetchGdeltArticles,
+	type NewsArticle,
+	type NewsMatch,
+	type NewsReranker,
+	type ProblemCandidate,
+	pickNewsMatch,
+	rankProblemsByNews,
+} from "./newsPick";
 import { pickRandomProblemId } from "./openaiHelpers";
 
 export type ResolvedPick = {
@@ -5,7 +15,16 @@ export type ResolvedPick = {
 	specificProblemId: string | null;
 	poolSize?: number;
 	category?: string | null;
+	/** Prompt context explaining a news-driven pick. */
+	newsContext?: string;
+	newsScore?: number;
 };
+
+/** Categories about real people; keep them out of news-driven picks. */
+export const NEWS_EXCLUDED_CATEGORIES = [
+	"missing persons",
+	"unsolved homicides",
+];
 
 function parseJsonPayload(text: string): unknown {
 	const trimmed = text.trim();
@@ -57,6 +76,39 @@ export function extractProblemIdsFromListResult(payload: unknown): string[] {
 				)?.[1],
 		)
 		.filter((value): value is string => Boolean(value));
+}
+
+export function extractProblemCandidatesFromListResult(
+	payload: unknown,
+): ProblemCandidate[] {
+	const root = payload as {
+		result?: { structuredContent?: { items?: unknown[] } };
+		structuredContent?: { items?: unknown[] };
+	};
+	const items =
+		root.result?.structuredContent?.items ?? root.structuredContent?.items;
+	if (!Array.isArray(items)) return [];
+
+	return items.flatMap((raw) => {
+		const item = raw as {
+			id?: unknown;
+			category?: unknown;
+			section?: unknown;
+			text?: unknown;
+			enrichment?: { summary?: unknown } | null;
+		};
+		if (typeof item.id !== "string" || !item.id.trim()) return [];
+		const text = [item.section, item.text, item.enrichment?.summary]
+			.filter((part): part is string => typeof part === "string")
+			.join(" ");
+		return [
+			{
+				id: item.id.trim(),
+				category: typeof item.category === "string" ? item.category : "",
+				text,
+			},
+		];
+	});
 }
 
 export function extractCategoriesFromListResult(payload: unknown): string[] {
@@ -193,6 +245,17 @@ export async function listAvailableProblemIds(
 	};
 }
 
+async function listAvailableCandidates(
+	mcpUrl: string,
+	category: string,
+): Promise<ProblemCandidate[]> {
+	const payload = await callMcp(mcpUrl, "tools/call", {
+		name: "list_problems",
+		arguments: { limit: 100, status: "available", category },
+	});
+	return extractProblemCandidatesFromListResult(payload);
+}
+
 export async function listCatalogCategories(mcpUrl: string): Promise<string[]> {
 	const payload = await callMcp(mcpUrl, "resources/read", {
 		uri: "open-questions://catalog",
@@ -213,6 +276,9 @@ export async function resolveRuntimePick(input: {
 	specificProblemId?: string | null;
 	mcpUrl: string;
 	limit?: number;
+	newsQuery?: string;
+	fetchArticles?: () => Promise<NewsArticle[]>;
+	rerank?: NewsReranker;
 }): Promise<ResolvedPick> {
 	if (input.pickMode === "specific") {
 		if (!input.specificProblemId) {
@@ -224,6 +290,17 @@ export async function resolveRuntimePick(input: {
 			pickMode: "specific",
 			specificProblemId: input.specificProblemId,
 		};
+	}
+
+	if (input.pickMode === "news") {
+		const newsPick = await resolveNewsPick(input).catch((error: unknown) => {
+			console.warn(
+				`News pick failed, falling back to random: ${error instanceof Error ? error.message : String(error)}`,
+			);
+			return null;
+		});
+		if (newsPick) return newsPick;
+		return resolveRuntimePick({ ...input, pickMode: "random" });
 	}
 
 	if (input.pickMode !== "random") {
@@ -259,4 +336,74 @@ export async function resolveRuntimePick(input: {
 	}
 
 	throw new Error("No available problems found in any category.");
+}
+
+async function discoverCategories(mcpUrl: string): Promise<string[]> {
+	const discovery = await listAvailableProblemIds(mcpUrl, 1);
+	return discovery.categories.length > 0
+		? discovery.categories
+		: listCatalogCategories(mcpUrl);
+}
+
+/**
+ * Match available problems against the last day of GDELT headlines.
+ * Returns null when no problem overlaps the news strongly enough, so the
+ * caller can fall back to random selection.
+ */
+async function resolveNewsPick(input: {
+	mcpUrl: string;
+	newsQuery?: string;
+	fetchArticles?: () => Promise<NewsArticle[]>;
+	rerank?: NewsReranker;
+}): Promise<ResolvedPick | null> {
+	const articles = await (input.fetchArticles
+		? input.fetchArticles()
+		: fetchGdeltArticles({ query: input.newsQuery }));
+	if (articles.length === 0) return null;
+
+	const categories = (await discoverCategories(input.mcpUrl)).filter(
+		(category) => !NEWS_EXCLUDED_CATEGORIES.includes(category.toLowerCase()),
+	);
+	const candidates: ProblemCandidate[] = [];
+	for (const category of categories) {
+		candidates.push(...(await listAvailableCandidates(input.mcpUrl, category)));
+	}
+
+	const ranked = rankProblemsByNews(candidates, articles);
+	const match = input.rerank
+		? await rerankOrPick(ranked, input.rerank)
+		: pickNewsMatch(ranked);
+	if (!match) return null;
+
+	return {
+		pickMode: "specific",
+		specificProblemId: match.problem.id,
+		poolSize: candidates.length,
+		category: match.problem.category,
+		newsContext: buildNewsContext(match),
+		newsScore: match.score,
+	};
+}
+
+/**
+ * Let the reranker choose among the top lexical matches. If it says none is
+ * real, the news pick is skipped; if it fails, fall back to the lexical pick.
+ */
+async function rerankOrPick(
+	ranked: NewsMatch[],
+	rerank: NewsReranker,
+): Promise<NewsMatch | null> {
+	const shortlist = ranked.slice(0, 40);
+	if (shortlist.length === 0) return null;
+	try {
+		const choice = await rerank(shortlist);
+		if (!choice) return null;
+		const match = shortlist[choice.index];
+		return match ? { ...match, rationale: choice.rationale } : null;
+	} catch (error) {
+		console.warn(
+			`News rerank failed, using lexical ranking: ${error instanceof Error ? error.message : String(error)}`,
+		);
+		return pickNewsMatch(ranked);
+	}
 }

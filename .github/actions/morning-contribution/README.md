@@ -12,6 +12,8 @@ Required inputs:
 - `api-token` — Open Questions contributor API token.
 
 Optional inputs are `model` (default `claude-opus-5-5`), `effort` (default
-`high`), `openalex-mailto`, `openalex-api-key`, and `searxng-url`.
+`high`), `pick-mode` (`random` by default, or `news` to prefer problems that
+overlap the last day of GDELT headlines), `news-query` (GDELT query for `news`
+mode), `openalex-mailto`, `openalex-api-key`, and `searxng-url`.
 When triggered by a scheduled workflow, the action only runs at approximately
 8:45 AM Eastern; manual runs are not time-gated.

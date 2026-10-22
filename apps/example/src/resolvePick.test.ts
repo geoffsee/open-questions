@@ -149,6 +149,120 @@ describe("pickRandomCategory", () => {
 });
 
 describe("resolveRuntimePick", () => {
+	function mockMcp(
+		itemsByCategory: Record<string, Array<Record<string, unknown>>>,
+	) {
+		const listed: string[] = [];
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body ?? "{}")) as {
+				params?: { arguments?: { category?: string } };
+			};
+			const category = body.params?.arguments?.category;
+			if (category) listed.push(category);
+			const items = category ? (itemsByCategory[category] ?? []) : [];
+			const categories = Object.fromEntries(
+				Object.entries(itemsByCategory).map(([name, list]) => [
+					name,
+					list.length,
+				]),
+			);
+			return new Response(
+				JSON.stringify({
+					result: { structuredContent: { items, categories } },
+				}),
+			);
+		}) as typeof fetch;
+		return listed;
+	}
+
+	const newsItems = {
+		biology: [
+			{
+				id: "bio-dna",
+				category: "biology",
+				section: "Anthropology",
+				text: "When did humans first reach North America according to ancient DNA?",
+			},
+		],
+		mathematics: Array.from({ length: 20 }, (_, index) => ({
+			id: `math-${index}`,
+			category: "mathematics",
+			text: `Conjecture ${index} about prime gaps and modular forms`,
+		})),
+		"unsolved homicides": [
+			{
+				id: "case-1",
+				category: "unsolved homicides",
+				text: "Ancient DNA humans North America",
+			},
+		],
+	};
+
+	test("news mode picks a problem that overlaps the headlines", async () => {
+		const listed = mockMcp(newsItems);
+		const pick = await resolveRuntimePick({
+			pickMode: "news",
+			mcpUrl: "https://example.test/mcp",
+			fetchArticles: async () => [
+				{
+					title: "Ancient DNA challenges when humans reached North America",
+					url: "https://example.com/dna",
+				},
+			],
+		});
+		expect(pick.specificProblemId).toBe("bio-dna");
+		expect(pick.pickMode).toBe("specific");
+		expect(pick.newsContext).toContain("https://example.com/dna");
+		expect(listed).not.toContain("unsolved homicides");
+	});
+
+	test("news mode skips the news pick when the reranker finds nothing", async () => {
+		mockMcp(newsItems);
+		const pick = await resolveRuntimePick({
+			pickMode: "news",
+			mcpUrl: "https://example.test/mcp",
+			fetchArticles: async () => [
+				{
+					title: "Ancient DNA challenges when humans reached North America",
+					url: "https://example.com/dna",
+				},
+			],
+			rerank: async () => null,
+		});
+		expect(pick.newsContext).toBeUndefined();
+	});
+
+	test("news mode uses the reranker's choice and rationale", async () => {
+		mockMcp(newsItems);
+		const pick = await resolveRuntimePick({
+			pickMode: "news",
+			mcpUrl: "https://example.test/mcp",
+			fetchArticles: async () => [
+				{
+					title: "Ancient DNA challenges when humans reached North America",
+					url: "https://example.com/dna",
+				},
+			],
+			rerank: async () => ({ index: 0, rationale: "Same migration question." }),
+		});
+		expect(pick.specificProblemId).toBe("bio-dna");
+		expect(pick.newsContext).toContain("Same migration question.");
+	});
+
+	test("news mode falls back to random when GDELT fails", async () => {
+		mockMcp(newsItems);
+		const pick = await resolveRuntimePick({
+			pickMode: "news",
+			mcpUrl: "https://example.test/mcp",
+			fetchArticles: async () => {
+				throw new Error("rate limited");
+			},
+		});
+		expect(pick.pickMode).toBe("specific");
+		expect(pick.newsContext).toBeUndefined();
+		expect(pick.specificProblemId).toBeTruthy();
+	});
+
 	test("keeps specific picks", async () => {
 		await expect(
 			resolveRuntimePick({

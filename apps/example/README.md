@@ -75,8 +75,11 @@ LOG_MAX_CHARS=4000
 1. `agent`
 2. `random`
 3. `specific`
+4. `news` (Claude Agent SDK runner only)
 
 Use `random` for variety across fields (it shuffles a category filter first), or `agent` when the model should select based on the user brief.
+
+`news` fetches the last 24 hours of English science headlines from the [GDELT DOC API](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) and scores each available problem against each headline by rare-term overlap. Claude then reviews the top 40 pairs in one tool-free, low-effort call and keeps the one with a real connection, or none. The matching headlines and Claude's reason go to the agent as context. If GDELT fails or nothing qualifies, it falls back to `random`. `missing persons` and `unsolved homicides` are excluded. Set `OPEN_QUESTIONS_NEWS_QUERY` to replace the default science-focused GDELT query.
 
 All runners will:
 
