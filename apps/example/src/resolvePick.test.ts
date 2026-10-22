@@ -212,6 +212,7 @@ describe("resolveRuntimePick", () => {
 		});
 		expect(pick.specificProblemId).toBe("bio-dna");
 		expect(pick.pickMode).toBe("specific");
+		expect(pick.pickSource).toBe("news");
 		expect(pick.newsContext).toContain("https://example.com/dna");
 		expect(listed).not.toContain("unsolved homicides");
 	});
@@ -319,6 +320,7 @@ describe("resolveRuntimePick", () => {
 		expect(pick).toMatchObject({
 			pickMode: "specific",
 			specificProblemId: "chem-1",
+			pickSource: "continue",
 			priorEntryCount: 2,
 		});
 		expect(pick.priorWork).toContain("On-water rate gain");
@@ -381,6 +383,7 @@ describe("resolveRuntimePick", () => {
 			random: () => 0.9,
 		});
 		expect(fresh.specificProblemId).toBe("bio-1");
+		expect(fresh.pickSource).toBe("random");
 	});
 
 	test("keeps specific picks", async () => {
@@ -392,6 +395,7 @@ describe("resolveRuntimePick", () => {
 			}),
 		).resolves.toEqual({
 			pickMode: "specific",
+			pickSource: "specific",
 			specificProblemId: "math-001",
 		});
 	});
@@ -404,6 +408,7 @@ describe("resolveRuntimePick", () => {
 			}),
 		).resolves.toEqual({
 			pickMode: "agent",
+			pickSource: "agent",
 			specificProblemId: null,
 		});
 	});
@@ -615,6 +620,7 @@ describe("resolveRuntimePick", () => {
 
 		expect(resolved).toEqual({
 			pickMode: "specific",
+			pickSource: "random",
 			specificProblemId: "filled-001",
 			poolSize: 1,
 			category: "filled",
