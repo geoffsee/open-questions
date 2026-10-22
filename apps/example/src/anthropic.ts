@@ -12,6 +12,11 @@ import {
 	summarizeToolOutcome,
 	truncate,
 } from "./logger";
+import {
+	buildRerankPrompt,
+	type NewsReranker,
+	parseRerankReply,
+} from "./newsPick";
 import { buildCatalogPrompt, buildUserBrief } from "./prompt";
 import { resolveRuntimePick } from "./resolvePick";
 import {
@@ -69,6 +74,7 @@ export const ALLOWED_MCP_TOOLS = [
 function buildPrompt(input: {
 	pickMode: string;
 	specificProblemId?: string | null;
+	newsContext?: string;
 }) {
 	return buildCatalogPrompt({
 		agentId: AGENT_ID,
@@ -79,7 +85,7 @@ function buildPrompt(input: {
 			goal: USER_GOAL,
 			background: USER_BACKGROUND,
 			constraints: USER_CONSTRAINTS,
-			context: USER_CONTEXT,
+			context: [USER_CONTEXT, input.newsContext].filter(Boolean).join("\n\n"),
 		}),
 		variant: "anthropic",
 	});
@@ -232,6 +238,8 @@ async function main() {
 		specificProblemId: SPECIFIC_PROBLEM_ID,
 		mcpUrl: MCP_URL,
 		limit: 100,
+		newsQuery: process.env.OPEN_QUESTIONS_NEWS_QUERY || undefined,
+		rerank: rerankNewsMatches,
 	});
 	const prompt = buildPrompt(resolvedPick);
 
@@ -243,6 +251,7 @@ async function main() {
 		problemId: resolvedPick.specificProblemId,
 		category: resolvedPick.category ?? null,
 		poolSize: resolvedPick.poolSize ?? null,
+		newsScore: resolvedPick.newsScore ?? null,
 		userGoal: USER_GOAL || null,
 	});
 	log.debug("agent prompt", { promptChars: prompt.length });
@@ -384,6 +393,36 @@ if (import.meta.main) {
 		throw error;
 	}
 }
+
+/** One tool-free model call that keeps only a substantive news connection. */
+const rerankNewsMatches: NewsReranker = async (shortlist) => {
+	let reply = "";
+	for await (const message of query({
+		prompt: buildRerankPrompt(shortlist),
+		options: {
+			model: MODEL,
+			effort: "low",
+			tools: [],
+			maxTurns: 1,
+			settingSources: [],
+			persistSession: false,
+		},
+	})) {
+		if (message.type === "result") {
+			if (message.subtype !== "success") {
+				throw new Error(`rerank ended with ${message.subtype}`);
+			}
+			reply = message.result;
+		}
+	}
+	const choice = parseRerankReply(reply, shortlist.length);
+	log.info("news rerank", {
+		shortlist: shortlist.length,
+		choice: choice ? shortlist[choice.index]?.problem.id : null,
+		rationale: choice?.rationale ?? null,
+	});
+	return choice;
+};
 
 function parseEffort(value: string | undefined, fallback: Effort): Effort {
 	if (!value) return fallback;

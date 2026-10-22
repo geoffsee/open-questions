@@ -29,6 +29,8 @@ jobs:
           api-token: ${{ secrets.OPEN_QUESTIONS_API_TOKEN }}
           model: ${{ vars.ANTHROPIC_MODEL }}
           effort: ${{ vars.ANTHROPIC_EFFORT }}
+          pick-mode: ${{ vars.OPEN_QUESTIONS_PICK_MODE }}
+          news-query: ${{ vars.OPEN_QUESTIONS_NEWS_QUERY }}
           openalex-mailto: ${{ secrets.OPENALEX_MAILTO }}
           openalex-api-key: ${{ secrets.OPENALEX_API_KEY }}
           searxng-url: ${{ secrets.SEARXNG_URL }}

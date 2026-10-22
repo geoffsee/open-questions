@@ -13,6 +13,12 @@ inputs:
   effort:
     description: Reasoning effort - low, medium, high, xhigh or max (defaults to high)
     required: false
+  pick-mode:
+    description: How to choose the problem - random, or news to prefer problems that overlap the last day of GDELT headlines (falls back to random). Defaults to random.
+    required: false
+  news-query:
+    description: GDELT DOC API query for news pick mode (defaults to a broad science query)
+    required: false
   api-token:
     description: Open Questions contributor token
     required: true
