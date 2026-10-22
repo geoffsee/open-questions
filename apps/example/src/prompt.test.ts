@@ -122,4 +122,25 @@ describe("buildCatalogPrompt", () => {
 		expect(prompt).toContain("Do not call submit_solution or release_problem.");
 		expect(prompt).toContain("if you ran sandbox code");
 	});
+
+	test("asks fresh picks to check problem history", () => {
+		const prompt = buildCatalogPrompt({ ...base, variant: "anthropic" });
+		expect(prompt).toContain("Call get_problem_history for the chosen problem");
+		expect(prompt).not.toContain("Prior work on this problem");
+	});
+
+	test("embeds prior work and continuation rules", () => {
+		const prompt = buildCatalogPrompt({
+			...base,
+			pickMode: "specific",
+			specificProblemId: "chem-1",
+			variant: "anthropic",
+			priorWork: "[2026-10-21] reference: On-water rate gain",
+		});
+		expect(prompt).toContain("Prior work on this problem");
+		expect(prompt).toContain("On-water rate gain");
+		expect(prompt).toContain("Start from the prior work below.");
+		expect(prompt).toContain("next discriminating test, run it");
+		expect(prompt).not.toContain("Call get_problem_history");
+	});
 });

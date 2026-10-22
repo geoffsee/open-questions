@@ -1280,6 +1280,8 @@ export async function filterProblems(
 		category?: string;
 		query?: string;
 		status?: "available" | "claimed" | "submitted" | "all";
+		/** Only problems that already have substantive research entries. */
+		researched?: boolean;
 	},
 ) {
 	const normalizedCategory = filters.category?.trim().toLowerCase();
@@ -1305,6 +1307,12 @@ export async function filterProblems(
 			filters.status &&
 			filters.status !== "all" &&
 			queueStatus !== filters.status
+		)
+			return false;
+		if (
+			filters.researched &&
+			substantiveResearchEntries(state.researchEntriesByProblemId[problem.id])
+				.length === 0
 		)
 			return false;
 
@@ -1549,6 +1557,12 @@ function createMcpServer(
 					.enum(["available", "claimed", "submitted", "all"])
 					.optional()
 					.default("available"),
+				researched: z
+					.boolean()
+					.optional()
+					.describe(
+						"When true, only return problems that already have saved research, so an agent can continue earlier work.",
+					),
 				limit: z
 					.number()
 					.int()
@@ -1558,7 +1572,7 @@ function createMcpServer(
 					.default(DEFAULT_PICK_LIMIT),
 			}),
 		},
-		async ({ category, query, status, limit }) => {
+		async ({ category, query, status, researched, limit }) => {
 			const [problems, state] = await Promise.all([
 				loadProblems(env),
 				readQueueState(env),
@@ -1567,6 +1581,7 @@ function createMcpServer(
 				category,
 				query,
 				status,
+				researched,
 			});
 			const items = filtered.slice(0, limit);
 			const summarized = await Promise.all(
@@ -2077,6 +2092,82 @@ function createMcpServer(
 		},
 	);
 
+	server.registerTool(
+		"get_problem_history",
+		{
+			title: "Get Problem History",
+			description:
+				"Read the research entries and candidate solutions already saved for a problem, oldest first, so new work can build on them instead of repeating them.",
+			annotations: {
+				readOnlyHint: true,
+				destructiveHint: false,
+				idempotentHint: true,
+			},
+			inputSchema: z.object({
+				problemId: z.string(),
+				limit: z
+					.number()
+					.int()
+					.min(1)
+					.max(100)
+					.optional()
+					.default(20)
+					.describe(
+						"Maximum number of most recent research entries to return.",
+					),
+			}),
+		},
+		async ({ problemId, limit }) => {
+			const problem = await getProblem(problemId, env);
+			if (!problem) {
+				return {
+					content: textContent(`Unknown problemId: ${problemId}`),
+					isError: true,
+				};
+			}
+
+			const state = await readQueueState(env);
+			const entries = substantiveResearchEntries(
+				state.researchEntriesByProblemId[problemId],
+			)
+				.sort(
+					(a, b) =>
+						new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+				)
+				.slice(-limit);
+			const submissions = [
+				...(state.solutionsByProblemId[problemId] ?? []),
+			].sort(
+				(a, b) =>
+					new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime(),
+			);
+
+			const lines = [
+				...entries.map(
+					(entry) =>
+						`[${entry.createdAt}] ${entry.kind}: ${entry.title ?? "(untitled)"}\n${entry.content}${entry.artifactUrl ? `\nSource: ${entry.artifactUrl}` : ""}`,
+				),
+				...submissions.map(
+					(submission) =>
+						`[${submission.submittedAt}] submission: ${submission.title ?? "(untitled)"}\n${submission.summary}`,
+				),
+			];
+
+			return {
+				content: textContent(
+					lines.length === 0
+						? `No research has been saved for ${problemId} yet.`
+						: lines.join("\n\n"),
+				),
+				structuredContent: {
+					problem: await summarizeProblem(problem, state),
+					entries,
+					submissions,
+				},
+			};
+		},
+	);
+
 	return server;
 }
 
@@ -2312,6 +2403,7 @@ app.get("/", (c) =>
 				"save_progress",
 				"search_web",
 				"list_claims",
+				"get_problem_history",
 			],
 			resources: [
 				"open-questions://catalog",

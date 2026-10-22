@@ -263,6 +263,126 @@ describe("resolveRuntimePick", () => {
 		expect(pick.specificProblemId).toBeTruthy();
 	});
 
+	function mockContinueMcp(input: {
+		researched: Array<Record<string, unknown>>;
+		history?: string;
+		historyError?: boolean;
+		categories?: Record<string, Array<Record<string, unknown>>>;
+	}) {
+		const calls: Array<{ name?: string; arguments?: Record<string, unknown> }> =
+			[];
+		globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body ?? "{}")) as {
+				params?: { name?: string; arguments?: Record<string, unknown> };
+			};
+			calls.push(body.params ?? {});
+			if (body.params?.name === "get_problem_history") {
+				return new Response(
+					JSON.stringify({
+						result: {
+							isError: input.historyError ?? false,
+							content: [{ type: "text", text: input.history ?? "" }],
+						},
+					}),
+				);
+			}
+			const args = body.params?.arguments ?? {};
+			const byCategory = input.categories ?? {};
+			const items = args.researched
+				? input.researched
+				: typeof args.category === "string"
+					? (byCategory[args.category] ?? [])
+					: [];
+			const categories = Object.fromEntries(
+				Object.entries(byCategory).map(([name, list]) => [name, list.length]),
+			);
+			return new Response(
+				JSON.stringify({
+					result: { structuredContent: { items, categories } },
+				}),
+			);
+		}) as typeof fetch;
+		return calls;
+	}
+
+	test("continue mode picks a researched problem and loads its history", async () => {
+		const calls = mockContinueMcp({
+			researched: [
+				{ id: "chem-1", category: "chemistry", researchEntryCount: 2 },
+			],
+			history: "[2026-10-21] reference: On-water rate gain\nNext test: ...",
+		});
+		const pick = await resolveRuntimePick({
+			pickMode: "continue",
+			mcpUrl: "https://example.test/mcp",
+		});
+		expect(pick).toMatchObject({
+			pickMode: "specific",
+			specificProblemId: "chem-1",
+			priorEntryCount: 2,
+		});
+		expect(pick.priorWork).toContain("On-water rate gain");
+		expect(calls[0]?.arguments).toMatchObject({ researched: true });
+		expect(calls[1]).toMatchObject({
+			name: "get_problem_history",
+			arguments: { problemId: "chem-1" },
+		});
+	});
+
+	test("continue mode falls back to random when nothing has history", async () => {
+		mockContinueMcp({
+			researched: [],
+			categories: { biology: [{ id: "bio-1", category: "biology" }] },
+		});
+		const pick = await resolveRuntimePick({
+			pickMode: "continue",
+			mcpUrl: "https://example.test/mcp",
+		});
+		expect(pick.specificProblemId).toBe("bio-1");
+		expect(pick.priorWork).toBeUndefined();
+	});
+
+	test("continue mode falls back when the history tool fails", async () => {
+		mockContinueMcp({
+			researched: [
+				{ id: "chem-1", category: "chemistry", researchEntryCount: 2 },
+			],
+			historyError: true,
+			categories: { biology: [{ id: "bio-1", category: "biology" }] },
+		});
+		const pick = await resolveRuntimePick({
+			pickMode: "continue",
+			mcpUrl: "https://example.test/mcp",
+		});
+		expect(pick.specificProblemId).toBe("bio-1");
+		expect(pick.priorWork).toBeUndefined();
+	});
+
+	test("continueRatio sends some random runs to a continuation", async () => {
+		mockContinueMcp({
+			researched: [
+				{ id: "chem-1", category: "chemistry", researchEntryCount: 1 },
+			],
+			history: "earlier note",
+			categories: { biology: [{ id: "bio-1", category: "biology" }] },
+		});
+		const continued = await resolveRuntimePick({
+			pickMode: "random",
+			mcpUrl: "https://example.test/mcp",
+			continueRatio: 0.5,
+			random: () => 0.1,
+		});
+		expect(continued.specificProblemId).toBe("chem-1");
+
+		const fresh = await resolveRuntimePick({
+			pickMode: "random",
+			mcpUrl: "https://example.test/mcp",
+			continueRatio: 0.5,
+			random: () => 0.9,
+		});
+		expect(fresh.specificProblemId).toBe("bio-1");
+	});
+
 	test("keeps specific picks", async () => {
 		await expect(
 			resolveRuntimePick({

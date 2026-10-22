@@ -1,4 +1,11 @@
 import {
+	extractHistoryText,
+	extractResearchedCandidates,
+	pickContinuation,
+	shouldContinue,
+	truncateHistory,
+} from "./continuePick";
+import {
 	buildNewsContext,
 	fetchGdeltArticles,
 	type NewsArticle,
@@ -18,6 +25,10 @@ export type ResolvedPick = {
 	/** Prompt context explaining a news-driven pick. */
 	newsContext?: string;
 	newsScore?: number;
+	/** Saved research on the picked problem, for a continuation run. */
+	priorWork?: string;
+	/** Number of saved research entries the continuation builds on. */
+	priorEntryCount?: number;
 };
 
 /** Categories about real people; keep them out of news-driven picks. */
@@ -279,6 +290,9 @@ export async function resolveRuntimePick(input: {
 	newsQuery?: string;
 	fetchArticles?: () => Promise<NewsArticle[]>;
 	rerank?: NewsReranker;
+	/** Share of random/news runs that continue earlier work instead (0–1). */
+	continueRatio?: number;
+	random?: () => number;
 }): Promise<ResolvedPick> {
 	if (input.pickMode === "specific") {
 		if (!input.specificProblemId) {
@@ -292,21 +306,43 @@ export async function resolveRuntimePick(input: {
 		};
 	}
 
-	if (input.pickMode === "news") {
-		const newsPick = await resolveNewsPick(input).catch((error: unknown) => {
+	const continues =
+		input.pickMode === "continue" ||
+		((input.pickMode === "random" || input.pickMode === "news") &&
+			shouldContinue(input.continueRatio ?? 0, input.random));
+	if (continues) {
+		const continuation = await resolveContinuePick(input).catch(
+			(error: unknown) => {
+				console.warn(
+					`Continue pick failed, falling back: ${error instanceof Error ? error.message : String(error)}`,
+				);
+				return null;
+			},
+		);
+		if (continuation) return continuation;
+	}
+	// Fallbacks below must not roll for a continuation again.
+	const base = {
+		...input,
+		pickMode: input.pickMode === "continue" ? "random" : input.pickMode,
+		continueRatio: 0,
+	};
+
+	if (base.pickMode === "news") {
+		const newsPick = await resolveNewsPick(base).catch((error: unknown) => {
 			console.warn(
 				`News pick failed, falling back to random: ${error instanceof Error ? error.message : String(error)}`,
 			);
 			return null;
 		});
 		if (newsPick) return newsPick;
-		return resolveRuntimePick({ ...input, pickMode: "random" });
+		return resolveRuntimePick({ ...base, pickMode: "random" });
 	}
 
-	if (input.pickMode !== "random") {
+	if (base.pickMode !== "random") {
 		return {
-			pickMode: input.pickMode,
-			specificProblemId: input.specificProblemId ?? null,
+			pickMode: base.pickMode,
+			specificProblemId: base.specificProblemId ?? null,
 		};
 	}
 
@@ -336,6 +372,37 @@ export async function resolveRuntimePick(input: {
 	}
 
 	throw new Error("No available problems found in any category.");
+}
+
+/**
+ * Pick an available problem that already has saved research and load that
+ * history, so the agent builds on it. Returns null when nothing qualifies.
+ */
+async function resolveContinuePick(input: {
+	mcpUrl: string;
+	random?: () => number;
+}): Promise<ResolvedPick | null> {
+	const listed = await callMcp(input.mcpUrl, "tools/call", {
+		name: "list_problems",
+		arguments: { status: "available", researched: true, limit: 100 },
+	});
+	const candidates = extractResearchedCandidates(listed);
+	const choice = pickContinuation(candidates, input.random);
+	if (!choice) return null;
+
+	const history = await callMcp(input.mcpUrl, "tools/call", {
+		name: "get_problem_history",
+		arguments: { problemId: choice.id, limit: 10 },
+	});
+
+	return {
+		pickMode: "specific",
+		specificProblemId: choice.id,
+		poolSize: candidates.length,
+		category: choice.category,
+		priorWork: truncateHistory(extractHistoryText(history)),
+		priorEntryCount: choice.researchEntryCount,
+	};
 }
 
 async function discoverCategories(mcpUrl: string): Promise<string[]> {

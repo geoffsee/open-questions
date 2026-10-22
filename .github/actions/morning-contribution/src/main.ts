@@ -58,6 +58,7 @@ function environment(): Record<string, string> {
 		OPEN_QUESTIONS_AGENT_ID: "github-actions-morning",
 		OPEN_QUESTIONS_PICK_MODE: core.getInput("pick-mode") || "random",
 		OPEN_QUESTIONS_NEWS_QUERY: core.getInput("news-query"),
+		OPEN_QUESTIONS_CONTINUE_RATIO: core.getInput("continue-ratio"),
 		ANTHROPIC_MODEL: core.getInput("model") || "claude-opus-5-5",
 		ANTHROPIC_EFFORT: core.getInput("effort") || "high",
 		OPENALEX_MAILTO: core.getInput("openalex-mailto"),

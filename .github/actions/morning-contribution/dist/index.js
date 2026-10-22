@@ -31106,6 +31106,7 @@ function environment() {
         OPEN_QUESTIONS_AGENT_ID: "github-actions-morning",
         OPEN_QUESTIONS_PICK_MODE: getInput("pick-mode") || "random",
         OPEN_QUESTIONS_NEWS_QUERY: getInput("news-query"),
+        OPEN_QUESTIONS_CONTINUE_RATIO: getInput("continue-ratio"),
         ANTHROPIC_MODEL: getInput("model") || "claude-opus-5-5",
         ANTHROPIC_EFFORT: getInput("effort") || "high",
         OPENALEX_MAILTO: getInput("openalex-mailto"),
