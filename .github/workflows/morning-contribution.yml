@@ -31,6 +31,7 @@ jobs:
           effort: ${{ vars.ANTHROPIC_EFFORT }}
           pick-mode: ${{ vars.OPEN_QUESTIONS_PICK_MODE }}
           news-query: ${{ vars.OPEN_QUESTIONS_NEWS_QUERY }}
+          continue-ratio: ${{ vars.OPEN_QUESTIONS_CONTINUE_RATIO }}
           openalex-mailto: ${{ secrets.OPENALEX_MAILTO }}
           openalex-api-key: ${{ secrets.OPENALEX_API_KEY }}
           searxng-url: ${{ secrets.SEARXNG_URL }}

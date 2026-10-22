@@ -76,10 +76,13 @@ LOG_MAX_CHARS=4000
 2. `random`
 3. `specific`
 4. `news` (Claude Agent SDK runner only)
+5. `continue` (Claude Agent SDK runner only)
 
 Use `random` for variety across fields (it shuffles a category filter first), or `agent` when the model should select based on the user brief.
 
 `news` fetches the last 24 hours of English science headlines from the [GDELT DOC API](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/) and scores each available problem against each headline by rare-term overlap. Claude then reviews the top 40 pairs in one tool-free, low-effort call and keeps the one with a real connection, or none. The matching headlines and Claude's reason go to the agent as context. If GDELT fails or nothing qualifies, it falls back to `random`. `missing persons` and `unsolved homicides` are excluded. Set `OPEN_QUESTIONS_NEWS_QUERY` to replace the default science-focused GDELT query.
+
+`continue` picks an available problem that already has saved research, favouring problems with more entries (each problem's weight is capped at 5 entries), and loads the last 10 entries through `get_problem_history`. The agent gets that history with instructions to run the next test the latest entry names and to add something new rather than restate it. If no problem has history, or the history can't be loaded, it falls back to `random`. Set `OPEN_QUESTIONS_CONTINUE_RATIO` (0 to 1) to send that share of `random` or `news` runs to `continue` instead; for example, `0.67` continues earlier work on about two mornings in three.
 
 All runners will:
 

@@ -66,6 +66,8 @@ export function buildCatalogPrompt(input: {
 	specificProblemId?: string | null;
 	userBrief: string;
 	variant: "anthropic" | "cursor";
+	/** Saved research on the picked problem, when this run continues it. */
+	priorWork?: string;
 }): string {
 	const catalogLine =
 		input.variant === "anthropic"
@@ -83,10 +85,28 @@ export function buildCatalogPrompt(input: {
 					"Use the code_sandbox run_code tool to write and execute short python/javascript/typescript snippets when a calculation, simulation, or prototype would test an idea.",
 				];
 
-	const researchStep =
+	const tools =
 		input.variant === "anthropic"
-			? "3. Use the configured tools to find a credible primary source or authoritative review relevant to the problem."
-			: "3. Use the configured research tools to find a credible primary source or authoritative review relevant to the problem.";
+			? "the configured tools"
+			: "the configured research tools";
+	const researchStep = input.priorWork
+		? `3. Start from the prior work below. Use ${tools} only for what it does not already establish.`
+		: `3. Call get_problem_history for the chosen problem and build on any saved work, then use ${tools} to find a credible primary source or authoritative review relevant to the problem.`;
+
+	const priorWorkLines = input.priorWork
+		? [
+				"",
+				"Prior work on this problem (saved by earlier runs, oldest first):",
+				input.priorWork,
+				"",
+				"This run continues that work:",
+				"- Do not re-cite a source or restate a claim already recorded; add something new.",
+				"- If the latest entry names a next discriminating test, run it (with run_code when it is computational) and report whether the result supports or refutes the earlier claim.",
+				"- If earlier entries conflict, say which is better supported and why.",
+				"- Use kind=failed_attempt when the test refutes the earlier claim, and hypothesis or candidate_approach when it narrows the question.",
+				"- Title the entry by what changed relative to the earlier work.",
+			]
+		: [];
 
 	return [
 		`You are agent ${input.agentId} contributing to the Open Questions.`,
@@ -111,6 +131,7 @@ export function buildCatalogPrompt(input: {
 		"   - if you ran sandbox code, briefly report what was tested and the observed result",
 		"   - do not claim the open problem is solved",
 		"6. Stop after saving progress. Do not call submit_solution or release_problem.",
+		...priorWorkLines,
 		"",
 		input.userBrief
 			? `User brief:\n${input.userBrief}`

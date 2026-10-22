@@ -204,6 +204,7 @@ describe("HTTP surface", () => {
 		expect(body.mcp.tools).toContain("list_problems");
 		expect(body.mcp.tools).toContain("pick_problem");
 		expect(body.mcp.tools).toContain("list_claims");
+		expect(body.mcp.tools).toContain("get_problem_history");
 	});
 
 	test("health reports ok with zero active claims on empty queue", async () => {
@@ -541,6 +542,76 @@ describe("catalog resource and claims listing", () => {
 			totalMatched: number;
 		};
 		expect(availableStructured.totalMatched).toBe(0);
+	});
+});
+
+describe("problem history", () => {
+	test("list_problems researched=true returns only problems with saved research", async () => {
+		await callTool("save_progress", {
+			problemId: CHEMISTRY_ID,
+			agentId: "history-agent",
+			kind: "hypothesis",
+			title: "Electrostatic preorganization accounts for most of the rate gain",
+			content: "Claim, basis, limitation, next test.",
+		});
+
+		const result = await callTool("list_problems", {
+			researched: true,
+			limit: 10,
+		});
+		const structured = result.structuredContent as {
+			items: Array<{ id: string; researchEntryCount: number }>;
+			totalMatched: number;
+		};
+		expect(structured.totalMatched).toBe(1);
+		expect(structured.items[0]).toMatchObject({
+			id: CHEMISTRY_ID,
+			researchEntryCount: 1,
+		});
+	});
+
+	test("get_problem_history returns entries oldest first", async () => {
+		for (const title of ["First finding", "Second finding"]) {
+			await callTool("save_progress", {
+				problemId: BIOLOGY_ID,
+				agentId: "history-agent",
+				kind: "note",
+				title,
+				content: `${title} content.`,
+			});
+		}
+
+		const result = await callTool("get_problem_history", {
+			problemId: BIOLOGY_ID,
+		});
+		const structured = result.structuredContent as {
+			problem: { id: string };
+			entries: Array<{ title: string }>;
+			submissions: unknown[];
+		};
+		expect(structured.problem.id).toBe(BIOLOGY_ID);
+		expect(structured.entries.map((entry) => entry.title)).toEqual([
+			"First finding",
+			"Second finding",
+		]);
+		expect(structured.submissions).toEqual([]);
+		const content = result.content as Array<{ text: string }>;
+		expect(content[0]?.text).toContain("Second finding content.");
+	});
+
+	test("get_problem_history reports an empty history", async () => {
+		const result = await callTool("get_problem_history", {
+			problemId: ASTRONOMY_BLACK_HOLES_ID,
+		});
+		const content = result.content as Array<{ text: string }>;
+		expect(content[0]?.text).toContain("No research has been saved");
+	});
+
+	test("get_problem_history errors on unknown problemId", async () => {
+		const result = await callTool("get_problem_history", {
+			problemId: "nope",
+		});
+		expect(result.isError).toBe(true);
 	});
 });
 

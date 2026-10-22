@@ -4,6 +4,7 @@ import {
 	query,
 	type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { parseContinueRatio } from "./continuePick";
 import {
 	createLogger,
 	type Logger,
@@ -61,6 +62,7 @@ export const ALLOWED_MCP_TOOLS = [
 	`mcp__${MCP_SERVER}__pick_problem`,
 	`mcp__${MCP_SERVER}__save_progress`,
 	`mcp__${MCP_SERVER}__list_claims`,
+	`mcp__${MCP_SERVER}__get_problem_history`,
 	// Ephemeral code execution for testing ideas (in-process SDK MCP).
 	...ANTHROPIC_SANDBOX_ALLOWED_TOOLS,
 	// Research tooling comes from the servers in .mcp.json, not unsolved.
@@ -75,6 +77,7 @@ function buildPrompt(input: {
 	pickMode: string;
 	specificProblemId?: string | null;
 	newsContext?: string;
+	priorWork?: string;
 }) {
 	return buildCatalogPrompt({
 		agentId: AGENT_ID,
@@ -88,6 +91,7 @@ function buildPrompt(input: {
 			context: [USER_CONTEXT, input.newsContext].filter(Boolean).join("\n\n"),
 		}),
 		variant: "anthropic",
+		priorWork: input.priorWork,
 	});
 }
 
@@ -240,6 +244,9 @@ async function main() {
 		limit: 100,
 		newsQuery: process.env.OPEN_QUESTIONS_NEWS_QUERY || undefined,
 		rerank: rerankNewsMatches,
+		continueRatio: parseContinueRatio(
+			process.env.OPEN_QUESTIONS_CONTINUE_RATIO,
+		),
 	});
 	const prompt = buildPrompt(resolvedPick);
 
@@ -252,6 +259,7 @@ async function main() {
 		category: resolvedPick.category ?? null,
 		poolSize: resolvedPick.poolSize ?? null,
 		newsScore: resolvedPick.newsScore ?? null,
+		priorEntryCount: resolvedPick.priorEntryCount ?? null,
 		userGoal: USER_GOAL || null,
 	});
 	log.debug("agent prompt", { promptChars: prompt.length });
