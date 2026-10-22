@@ -7,6 +7,8 @@ describe("anthropic example", () => {
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__unsolved__list_problems");
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__unsolved__pick_problem");
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__unsolved__save_progress");
+		expect(ALLOWED_MCP_TOOLS).toContain("mcp__unsolved__search_web");
+		expect(ALLOWED_MCP_TOOLS).toContain("mcp__unsolved__get_problem_history");
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__code_sandbox__run_code");
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__searxng");
 		expect(ALLOWED_MCP_TOOLS).toContain("mcp__playwright");

@@ -62,6 +62,7 @@ export const ALLOWED_MCP_TOOLS = [
 	`mcp__${MCP_SERVER}__pick_problem`,
 	`mcp__${MCP_SERVER}__save_progress`,
 	`mcp__${MCP_SERVER}__list_claims`,
+	`mcp__${MCP_SERVER}__search_web`,
 	`mcp__${MCP_SERVER}__get_problem_history`,
 	// Ephemeral code execution for testing ideas (in-process SDK MCP).
 	...ANTHROPIC_SANDBOX_ALLOWED_TOOLS,
@@ -255,6 +256,7 @@ async function main() {
 		model: MODEL,
 		agentId: AGENT_ID,
 		pickMode: PICK_MODE,
+		pickSource: resolvedPick.pickSource,
 		problemId: resolvedPick.specificProblemId,
 		category: resolvedPick.category ?? null,
 		poolSize: resolvedPick.poolSize ?? null,

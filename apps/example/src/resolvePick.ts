@@ -19,6 +19,8 @@ import { pickRandomProblemId } from "./openaiHelpers";
 
 export type ResolvedPick = {
 	pickMode: string;
+	/** How the problem was actually chosen, which can differ from the configured mode. */
+	pickSource: string;
 	specificProblemId: string | null;
 	poolSize?: number;
 	category?: string | null;
@@ -302,6 +304,7 @@ export async function resolveRuntimePick(input: {
 		}
 		return {
 			pickMode: "specific",
+			pickSource: "specific",
 			specificProblemId: input.specificProblemId,
 		};
 	}
@@ -342,6 +345,7 @@ export async function resolveRuntimePick(input: {
 	if (base.pickMode !== "random") {
 		return {
 			pickMode: base.pickMode,
+			pickSource: base.pickMode,
 			specificProblemId: base.specificProblemId ?? null,
 		};
 	}
@@ -363,6 +367,7 @@ export async function resolveRuntimePick(input: {
 		if (candidateIds.length > 0) {
 			return {
 				pickMode: "specific",
+				pickSource: "random",
 				specificProblemId: pickRandomProblemId(candidateIds),
 				poolSize: candidateIds.length,
 				category,
@@ -397,6 +402,7 @@ async function resolveContinuePick(input: {
 
 	return {
 		pickMode: "specific",
+		pickSource: "continue",
 		specificProblemId: choice.id,
 		poolSize: candidates.length,
 		category: choice.category,
@@ -444,6 +450,7 @@ async function resolveNewsPick(input: {
 
 	return {
 		pickMode: "specific",
+		pickSource: "news",
 		specificProblemId: match.problem.id,
 		poolSize: candidates.length,
 		category: match.problem.category,
