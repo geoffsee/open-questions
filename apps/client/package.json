@@ -25,22 +25,22 @@
 		"marked": "^18.1.1",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
-		"telefunc": "^0.2.24",
+		"telefunc": "^0.3.0",
 		"vike": "0.4.268",
-		"vike-react": "^0.6.29",
+		"vike-react": "^0.6.31",
 		"vike-react-chakra": "^1.0.3"
 	},
 	"devDependencies": {
-		"@anthropic-ai/claude-agent-sdk": "^0.3.302",
+		"@anthropic-ai/claude-agent-sdk": "^0.3.309",
 		"@anthropic-ai/sdk": "^0.135.0",
-		"@types/bun": "^1.4.3",
+		"@types/bun": "^1.4.4",
 		"@types/react": "^19.3.0",
 		"@types/react-dom": "^19.3.0",
 		"@vitejs/plugin-react": "^6.1.2",
-		"linkedom": "^0.18.13",
+		"linkedom": "^0.18.14",
 		"playwright": "^1.64.1",
 		"typescript": "^6.0.3",
-		"vite": "^8.3.4"
+		"vite": "^8.3.5"
 	},
 	"type": "module"
 }
