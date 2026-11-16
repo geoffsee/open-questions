@@ -1,7 +1,7 @@
 {
 	"name": "open-questions",
 	"private": true,
-	"version": "0.0.20",
+	"version": "0.0.21",
 	"license": "UNLICENSED",
 	"author": "geoffsee",
 	"type": "module",
